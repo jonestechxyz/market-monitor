@@ -73,7 +73,9 @@ def get_latest_session(df: pd.DataFrame) -> dict:
     pct_change = (close_price - prev_close) / prev_close * 100 if prev_close else 0.0
     session_range = high - low
 
-    avg_volume_20d = float(df["Volume"].iloc[-21:-1].mean()) if len(df) >= 21 else volume
+    vol_series = df["Volume"].iloc[-21:-1]
+    vol_mean = vol_series.mean()
+    avg_volume_20d = float(vol_mean.iloc[0] if hasattr(vol_mean, "iloc") else vol_mean) if len(df) >= 21 else volume
 
     return {
         "date": df.index[-1].strftime("%Y-%m-%d"),
