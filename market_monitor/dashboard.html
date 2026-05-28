@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asia-EU Market Monitor</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0e1117;
+      --surface:   #161b27;
+      --surface2:  #1e2535;
+      --border:    #2a3347;
+      --accent:    #3b82f6;
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --yellow:    #eab308;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --mono:      "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    header h1 .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    #status-bar {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    /* ── Tabs ─────────────────────────────────────────────────────── */
+    .tab-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .tab-btn:hover { background: var(--surface2); color: var(--text); }
+
+    .tab-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* ── Cards ────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+    }
+
+    .card-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── Asian movers grid ────────────────────────────────────────── */
+    .movers-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    .mover-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .mover-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+
+    .mover-card.up::before   { background: var(--green); }
+    .mover-card.down::before { background: var(--red); }
+
+    .mover-symbol {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .mover-name {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 2px 0 8px;
+    }
+
+    .mover-pct {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: var(--mono);
+    }
+
+    .up   .mover-pct { color: var(--green); }
+    .down .mover-pct { color: var(--red); }
+
+    .mover-meta {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .meta-item label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      display: block;
+    }
+
+    .meta-item span {
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    /* ── EU watchlist table ───────────────────────────────────────── */
+    .eu-table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td      { background: var(--surface2); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--mono);
+    }
+
+    .badge-up   { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge-down { background: rgba(239,68,68,0.15);  color: var(--red); }
+
+    .mono { font-family: var(--mono); }
+
+    .reason-text {
+      font-size: 11px;
+      color: var(--muted);
+      max-width: 260px;
+    }
+
+    /* ── Levels pill row ──────────────────────────────────────────── */
+    .levels {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    .level-pill {
+      font-size: 11px;
+      font-family: var(--mono);
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .level-pill.entry  { border-color: var(--accent); color: var(--accent); }
+    .level-pill.stop   { border-color: var(--red);    color: var(--red); }
+    .level-pill.target { border-color: var(--green);  color: var(--green); }
+
+    /* ── Empty state ──────────────────────────────────────────────── */
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+    }
+
+    .empty big {
+      display: block;
+      font-size: 36px;
+      margin-bottom: 8px;
+    }
+
+    /* ── No-movers notice ─────────────────────────────────────────── */
+    .notice {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Responsive ───────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      header { flex-direction: column; align-items: flex-start; gap: 6px; }
+      main   { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1><span class="dot"></span> Asia-EU Market Monitor</h1>
+  <div id="status-bar">Loading briefings…</div>
+</header>
+
+<main>
+  <!-- Tab row -->
+  <div class="tab-row" id="tab-row"></div>
+
+  <!-- Dynamic content injected here -->
+  <div id="content"></div>
+</main>
+
+<footer>Indicative only — not financial advice &nbsp;|&nbsp; Data via yfinance</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ── Configuration ──────────────────────────────────────────────────────────
+  // How many briefing JSON files to try loading (newest first)
+  const MAX_BRIEFINGS = 5;
+
+  // If you keep briefings in a subfolder, adjust this prefix.
+  // When opening dashboard.html from inside market_monitor/, use "briefings/".
+  const BRIEFINGS_PREFIX = "briefings/";
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let briefings = [];   // array of parsed JSON records, newest first
+  let activeIdx = 0;    // which briefing is shown
+
+  // ── Boot: scan for briefing files ─────────────────────────────────────────
+  // We can't list a directory in a plain file:// context, so we try a known
+  // index file first, then fall back to inline demo data.
+  async function boot() {
+    // 1. Try loading a manifest written by main.py
+    let loaded = await tryLoadManifest();
+
+    // 2. If no manifest, try fetching the last 5 by timestamp convention
+    if (!loaded) {
+      loaded = await tryFetchFiles();
+    }
+
+    // 3. If still nothing, show demo data so the dashboard is usable offline
+    if (briefings.length === 0) {
+      injectDemoData();
+    }
+
+    render();
+  }
+
+  async function tryLoadManifest() {
+    try {
+      const res = await fetch(BRIEFINGS_PREFIX + "manifest.json", { cache: "no-store" });
+      if (!res.ok) return false;
+      const list = await res.json(); // array of filenames, newest first
+      await Promise.all(list.slice(0, MAX_BRIEFINGS).map(async (fname) => {
+        const r = await fetch(BRIEFINGS_PREFIX + fname, { cache: "no-store" });
+        if (r.ok) briefings.push(await r.json());
+      }));
+      briefings.sort((a, b) => b.generated_at.localeCompare(a.generated_at));
+      return briefings.length > 0;
+    } catch { return false; }
+  }
+
+  async function tryFetchFiles() {
+    // Attempt to load the index page and parse filenames (works on some servers)
+    try {
+      const res = await fetch(BRIEFINGS_PREFIX, { cache: "no-store" });
+      if (!res.ok) return false;
+      const html = await res.text();
+      const re = /briefing_[\w\-]+\.json/g;
+      const files = [...new Set(html.match(re) || [])].sort().reverse().slice(0, MAX_BRIEFINGS);
+      await Promise.all(files.map(async (fname) => {
+        const r = await fetch(BRIEFINGS_PREFIX + fname, { cache: "no-store" });
+        if (r.ok) briefings.push(await r.json());
+      }));
+      briefings.sort((a, b) => b.generated_at.localeCompare(a.generated_at));
+      return briefings.length > 0;
+    } catch { return false; }
+  }
+
+  function injectDemoData() {
+    briefings = [demoBriefing()];
+    document.getElementById("status-bar").textContent = "Demo mode — no briefing files found";
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  function render() {
+    renderTabs();
+    renderBriefing(briefings[activeIdx]);
+    const b = briefings[activeIdx];
+    if (b) {
+      document.getElementById("status-bar").textContent =
+        `Briefing ${activeIdx + 1} of ${briefings.length} · Generated ${b.generated_at} UTC`;
+    }
+  }
+
+  function renderTabs() {
+    const row = document.getElementById("tab-row");
+    row.innerHTML = "";
+    briefings.forEach((b, i) => {
+      const btn = document.createElement("button");
+      btn.className = "tab-btn" + (i === activeIdx ? " active" : "");
+      btn.textContent = fmtDate(b.generated_at);
+      btn.onclick = () => { activeIdx = i; render(); };
+      row.appendChild(btn);
+    });
+  }
+
+  function renderBriefing(b) {
+    const content = document.getElementById("content");
+    if (!b) {
+      content.innerHTML = `<div class="empty"><big>📭</big>No briefing data available.</div>`;
+      return;
+    }
+
+    const moversHtml  = renderMovers(b.asian_movers || []);
+    const euHtml      = renderEU(b.eu_watchlist || []);
+
+    content.innerHTML = `
+      ${moversHtml}
+      ${euHtml}
+    `;
+  }
+
+  function renderMovers(movers) {
+    const title = `<div class="card-title">Asian Movers — ≥2.5% move &amp; ≥1.5× avg volume</div>`;
+
+    if (movers.length === 0) {
+      return `<div class="card">
+        ${title}
+        <div class="notice">No index met the 2.5% move + 1.5× volume threshold in this session.</div>
+      </div>`;
+    }
+
+    const cards = movers.map(m => {
+      const dir = m.direction;
+      const arrow = dir === "up" ? "▲" : "▼";
+      const pctSign = m.pct_change > 0 ? "+" : "";
+      return `
+        <div class="mover-card ${dir}">
+          <div class="mover-symbol">${esc(m.symbol)}</div>
+          <div class="mover-name">${esc(m.name)}</div>
+          <div class="mover-pct">${arrow} ${pctSign}${m.pct_change.toFixed(2)}%</div>
+          <div class="mover-meta">
+            <div class="meta-item">
+              <label>Close</label>
+              <span>${fmt(m.close)}</span>
+            </div>
+            <div class="meta-item">
+              <label>Prev Close</label>
+              <span>${fmt(m.prev_close)}</span>
+            </div>
+            <div class="meta-item">
+              <label>Vol ×</label>
+              <span>${m.volume_ratio.toFixed(2)}×</span>
+            </div>
+            <div class="meta-item">
+              <label>ATR (14)</label>
+              <span>${fmt(m.atr)}</span>
+            </div>
+            <div class="meta-item">
+              <label>Session High</label>
+              <span>${fmt(m.high)}</span>
+            </div>
+            <div class="meta-item">
+              <label>Session Low</label>
+              <span>${fmt(m.low)}</span>
+            </div>
+          </div>
+        </div>`;
+    }).join("");
+
+    return `<div class="card">
+      ${title}
+      <div class="movers-grid">${cards}</div>
+    </div>`;
+  }
+
+  function renderEU(eu) {
+    const title = `<div class="card-title">EU Stocks to Watch at Open — ranked by estimated impact</div>`;
+
+    if (eu.length === 0) {
+      return `<div class="card">
+        ${title}
+        <div class="notice">No EU stocks flagged — no Asian movers met the thresholds.</div>
+      </div>`;
+    }
+
+    const rows = eu.map(e => {
+      const dir   = e.direction;
+      const arrow = dir === "up" ? "▲" : "▼";
+      const sign  = e.estimated_eu_move_pct > 0 ? "+" : "";
+      const cls   = dir === "up" ? "badge-up" : "badge-down";
+      const rr    = e.rr_ratio ? `1:${e.rr_ratio.toFixed(0)}` : "1:2";
+
+      const levelsHtml = (e.entry != null) ? `
+        <div class="levels">
+          <span class="level-pill entry">Entry&nbsp;${fmt(e.entry)}</span>
+          <span class="level-pill stop">Stop&nbsp;${fmt(e.stop)}</span>
+          <span class="level-pill target">Target&nbsp;${fmt(e.target)}&nbsp;(${rr})</span>
+        </div>` : "";
+
+      const prevPct = e.prev_pct_change != null
+        ? `<span class="mono" style="color:${e.prev_pct_change >= 0 ? 'var(--green)' : 'var(--red)'}">
+            ${e.prev_pct_change > 0 ? "+" : ""}${e.prev_pct_change.toFixed(2)}%
+           </span>`
+        : `<span style="color:var(--muted)">—</span>`;
+
+      return `<tr>
+        <td>
+          <div style="font-weight:600">${esc(e.eu_name)}</div>
+          <div class="mono" style="font-size:11px;color:var(--muted)">${esc(e.eu_ticker)}</div>
+        </td>
+        <td>
+          <span class="badge ${cls}">${arrow} ${sign}${e.estimated_eu_move_pct.toFixed(2)}%</span>
+        </td>
+        <td>
+          <div style="font-size:12px;color:var(--muted)">${esc(e.asian_name)}</div>
+          <div class="mono" style="font-size:12px">${e.asian_pct > 0 ? "+" : ""}${e.asian_pct.toFixed(2)}% · β ${e.beta.toFixed(2)}</div>
+        </td>
+        <td class="mono">${e.close != null ? fmt(e.close) : "—"}</td>
+        <td>${prevPct}</td>
+        <td>
+          <div class="reason-text">${esc(e.reason)}</div>
+          ${levelsHtml}
+        </td>
+      </tr>`;
+    }).join("");
+
+    return `<div class="card">
+      ${title}
+      <div class="eu-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Stock</th>
+              <th>Est. Move</th>
+              <th>Driven By</th>
+              <th>Last Close</th>
+              <th>Prev Session</th>
+              <th>Signal &amp; Levels (ATR-based)</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function fmtDate(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts.replace(" ", "T") + "Z");
+    return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
+  }
+
+  function fmt(n) {
+    if (n == null || isNaN(n)) return "—";
+    return Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  }
+
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // ── Demo data (shown when no briefing files are available) ─────────────────
+  function demoBriefing() {
+    return {
+      generated_at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      asian_movers: [
+        {
+          symbol: "^HSI", name: "Hang Seng", direction: "down",
+          pct_change: -3.12, close: 17840.5, prev_close: 18421.2,
+          high: 18300.0, low: 17720.0, volume: 1820000000,
+          avg_volume_20d: 1050000000, volume_ratio: 1.73, atr: 312.4,
+        },
+        {
+          symbol: "^N225", name: "Nikkei 225", direction: "up",
+          pct_change: 2.87, close: 38410.2, prev_close: 37340.8,
+          high: 38510.0, low: 37280.0, volume: 920000000,
+          avg_volume_20d: 540000000, volume_ratio: 1.70, atr: 480.6,
+        },
+      ],
+      eu_watchlist: [
+        {
+          eu_ticker: "HSBA.L", eu_name: "HSBC Holdings",
+          driven_by: "^HSI", asian_name: "Hang Seng",
+          asian_pct: -3.12, direction: "down",
+          reason: "HSBC derives ~50% revenue from Asia-Pacific",
+          beta: 0.70, estimated_eu_move_pct: -2.18,
+          close: 642.5, atr: 8.4, prev_pct_change: -1.1,
+          entry: 642.5, stop: 650.9, target: 625.7, rr_ratio: 2.0,
+        },
+        {
+          eu_ticker: "STAN.L", eu_name: "Standard Chartered",
+          driven_by: "^HSI", asian_name: "Hang Seng",
+          asian_pct: -3.12, direction: "down",
+          reason: "Standard Chartered 70%+ revenue from Asia/Africa",
+          beta: 0.75, estimated_eu_move_pct: -2.34,
+          close: 812.0, atr: 11.2, prev_pct_change: -0.8,
+          entry: 812.0, stop: 823.2, target: 789.6, rr_ratio: 2.0,
+        },
+        {
+          eu_ticker: "IFX.DE", eu_name: "Infineon Technologies",
+          driven_by: "^N225", asian_name: "Nikkei 225",
+          asian_pct: 2.87, direction: "up",
+          reason: "Semiconductor supply chain; Sony/Panasonic links",
+          beta: 0.55, estimated_eu_move_pct: 1.58,
+          close: 31.44, atr: 0.62, prev_pct_change: 1.4,
+          entry: 31.44, stop: 30.82, target: 32.68, rr_ratio: 2.0,
+        },
+        {
+          eu_ticker: "RIO.L", eu_name: "Rio Tinto",
+          driven_by: "^HSI", asian_name: "Hang Seng",
+          asian_pct: -3.12, direction: "down",
+          reason: "China iron ore demand; Rio ~50% China revenue",
+          beta: 0.55, estimated_eu_move_pct: -1.72,
+          close: 4820.0, atr: 74.0, prev_pct_change: -2.1,
+          entry: 4820.0, stop: 4894.0, target: 4672.0, rr_ratio: 2.0,
+        },
+      ],
+    };
+  }
+
+  // ── Go ─────────────────────────────────────────────────────────────────────
+  boot();
+})();
+</script>
+</body>
+</html>

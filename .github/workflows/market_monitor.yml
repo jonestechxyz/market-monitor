@@ -1,0 +1,46 @@
+name: Asia-EU Market Monitor
+
+on:
+  schedule:
+    # 06:00 CET = 05:00 UTC (winter) / 04:00 UTC (summer)
+    # Running at 05:00 UTC covers both CET and CEST windows before EU open.
+    - cron: "0 5 * * 1-5"
+  workflow_dispatch:  # allow manual runs from the Actions tab
+
+jobs:
+  run-briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r market_monitor/requirements.txt
+
+      - name: Run market monitor
+        env:
+          GMAIL_USER:     ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASS: ${{ secrets.GMAIL_APP_PASS }}
+          BRIEFING_TO:    ${{ secrets.BRIEFING_TO }}
+        run: |
+          cd market_monitor
+          python main.py
+
+      - name: Commit updated briefings
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add market_monitor/briefings/
+          # Only commit if there are staged changes
+          git diff --cached --quiet || git commit -m "chore: add briefing $(date -u +%Y-%m-%d)"
+          git push
