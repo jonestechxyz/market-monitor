@@ -35,6 +35,16 @@ EU_WATCHLIST: dict[str, str] = {
     "GLEN.L":  "Glencore",
     "BHP.L":   "BHP Group",
     "AZN.L":   "AstraZeneca",
+    # EU Tech — semiconductor & hardware
+    "ASML.AS": "ASML Holding",
+    "STM":  "STMicroelectronics",
+    "BESI.AS": "BE Semiconductor (BESI)",
+    # EU Tech — software & IT services
+    "CAP.PA":  "Capgemini",
+    "DSY.PA":  "Dassault Systèmes",
+    # EU Tech — telecom infrastructure
+    "NOKIA.HE": "Nokia",
+    "ERIC-B.ST": "Ericsson",
 }
 
 # ---------------------------------------------------------------------------
@@ -55,6 +65,15 @@ CORRELATION_MAP: list[dict] = [
     {"asian": "^N225", "direction": "any",  "eu": "SIE.DE",   "reason": "Industrial exports to Japan; factory automation", "beta": 0.35},
     {"asian": "^N225", "direction": "any",  "eu": "ALV.DE",   "reason": "Risk-on/off sentiment; Allianz global insurance", "beta": 0.25},
 
+    # Nikkei — EU tech
+    {"asian": "^N225", "direction": "any",  "eu": "ASML.AS",    "reason": "ASML sells EUV machines to TSMC/Samsung; Nikkei tech sentiment drives sector", "beta": 0.60},
+    {"asian": "^N225", "direction": "any",  "eu": "STM",     "reason": "STM chips go into Japanese auto/industrial; direct supply chain link", "beta": 0.55},
+    {"asian": "^N225", "direction": "any",  "eu": "BESI.AS",    "reason": "BESI packaging equipment sold to Asian chip fabs; Nikkei semiconductor proxy", "beta": 0.65},
+    {"asian": "^N225", "direction": "any",  "eu": "NOKIA.HE",   "reason": "Nokia 5G competes with Japanese vendors; risk-on tech sentiment", "beta": 0.30},
+    {"asian": "^N225", "direction": "any",  "eu": "ERIC-B.ST",  "reason": "Ericsson 5G Asia contracts; Nikkei tech risk-on/off signal", "beta": 0.30},
+    {"asian": "^N225", "direction": "any",  "eu": "CAP.PA",     "reason": "Capgemini IT services; Japan is top 5 revenue market", "beta": 0.25},
+    {"asian": "^N225", "direction": "any",  "eu": "DSY.PA",     "reason": "Dassault PLM software sold to Japanese auto/aerospace OEMs", "beta": 0.25},
+
     # --- Hang Seng (^HSI) ---
     # HK/China financial sector → European banks with Asia exposure
     {"asian": "^HSI",  "direction": "any",  "eu": "HSBA.L",   "reason": "HSBC derives ~50% revenue from Asia-Pacific", "beta": 0.70},
@@ -68,6 +87,14 @@ CORRELATION_MAP: list[dict] = [
     {"asian": "^HSI",  "direction": "any",  "eu": "BAS.DE",   "reason": "BASF chemicals; China is largest single market", "beta": 0.40},
     {"asian": "^HSI",  "direction": "any",  "eu": "ADS.DE",   "reason": "Adidas China revenue ~20% of total sales", "beta": 0.45},
     {"asian": "^HSI",  "direction": "any",  "eu": "HEN3.DE",  "reason": "Henkel consumer goods; Asia-Pacific growth market", "beta": 0.30},
+
+    # Hang Seng — EU tech (China chip demand)
+    {"asian": "^HSI",  "direction": "any",  "eu": "ASML.AS",    "reason": "ASML restricted from China but HSI moves reflect global chip demand cycle", "beta": 0.45},
+    {"asian": "^HSI",  "direction": "any",  "eu": "STM",     "reason": "STM sells into China electronics/EV market; HSI demand proxy", "beta": 0.50},
+    {"asian": "^HSI",  "direction": "any",  "eu": "BESI.AS",    "reason": "BESI packaging equipment; China is largest semiconductor assembly hub", "beta": 0.55},
+    {"asian": "^HSI",  "direction": "any",  "eu": "NOKIA.HE",   "reason": "Nokia China telecom exposure; HSI reflects broader China tech capex", "beta": 0.35},
+    {"asian": "^HSI",  "direction": "any",  "eu": "ERIC-B.ST",  "reason": "Ericsson lost China contracts; HSI down = risk-off for telecom infra", "beta": 0.25},
+    {"asian": "^HSI",  "direction": "any",  "eu": "CAP.PA",     "reason": "Capgemini APAC IT services; China digital transformation exposure", "beta": 0.20},
 
     # --- ASX 200 (^AXJO) ---
     # Australia commodity-heavy → European miners and energy
