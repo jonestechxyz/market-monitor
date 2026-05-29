@@ -61,9 +61,9 @@ def format_text_briefing(
     # --- Asian movers ---
     lines.append("")
     if not asian_movers:
-        lines.append("ASIAN MOVERS:  None met the 2.5% move + 1.5x volume threshold.")
+        lines.append("ASIAN MOVERS:  None met the 1.5% move + 1.2x volume threshold.")
     else:
-        lines.append(f"ASIAN MOVERS  (≥2.5% move, ≥1.5× avg volume)")
+        lines.append("ASIAN MOVERS  (≥1.5% move, ≥1.2× avg volume)")
         lines.append("-" * 72)
         for m in asian_movers:
             arrow = "▲" if m["direction"] == "up" else "▼"
@@ -74,12 +74,10 @@ def format_text_briefing(
                 f"Close {m['close']:,.2f}  ATR {m['atr']:,.2f}"
             )
 
-    # --- EU watchlist at open ---
+    # --- EU stocks driven by Asian movers ---
     lines.append("")
-    if not correlated_eu:
-        lines.append("EU STOCKS TO WATCH:  None flagged (no Asian movers).")
-    else:
-        lines.append(f"EU STOCKS TO WATCH AT OPEN  (ranked by estimated impact)")
+    if correlated_eu:
+        lines.append("EU STOCKS TO WATCH AT OPEN  (ranked by estimated impact)")
         lines.append("-" * 72)
         for c in correlated_eu:
             ticker = c["eu_ticker"]
@@ -105,6 +103,30 @@ def format_text_briefing(
                 lines.append(
                     f"     Entry ~{lvls['entry']:,.4f}  |  Stop {lvls['stop']:,.4f}  |  Target {lvls['target']:,.4f}  (1:{RR_RATIO:.0f} RR)"
                 )
+
+    # --- Full EU watchlist (always shown) ---
+    from correlations import EU_WATCHLIST
+    lines.append("")
+    lines.append("FULL EU WATCHLIST  (last close | ATR | prev session %)")
+    lines.append("-" * 72)
+    correlated_tickers = {c["eu_ticker"] for c in correlated_eu}
+    all_tickers = sorted(eu_data.keys())
+    flagged = [t for t in all_tickers if t in correlated_tickers]
+    others = [t for t in all_tickers if t not in correlated_tickers]
+    for ticker in flagged + others:
+        ed = eu_data.get(ticker, {})
+        if not ed:
+            continue
+        close = ed.get("close", 0)
+        atr = ed.get("atr", 0)
+        prev_pct = ed.get("pct_change", 0)
+        name = EU_WATCHLIST.get(ticker, ticker)
+        flag = "►" if ticker in correlated_tickers else " "
+        arrow = "▲" if prev_pct >= 0 else "▼"
+        lines.append(
+            f"  {flag} {arrow} {name:24s} ({ticker:10s})  "
+            f"Close {close:>10,.4f}  ATR {atr:>8,.4f}  {prev_pct:+.2f}%"
+        )
 
     lines.append("")
     lines.append(sep)

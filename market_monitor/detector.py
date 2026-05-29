@@ -7,8 +7,8 @@ import pandas as pd
 import numpy as np
 from fetcher import get_latest_session
 
-MOVE_THRESHOLD_PCT = 2.5
-VOLUME_SPIKE_RATIO = 1.5
+MOVE_THRESHOLD_PCT = 1.5
+VOLUME_SPIKE_RATIO = 1.2
 ATR_PERIOD = 14
 
 
