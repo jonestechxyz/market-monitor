@@ -4,7 +4,7 @@ on:
   schedule:
     # 06:00 CET = 05:00 UTC (winter) / 04:00 UTC (summer)
     # Running at 05:00 UTC covers both CET and CEST windows before EU open.
-    - cron: "0 5 * * 1-5"
+    - cron: "0 4 * * 1-5"
   workflow_dispatch:  # allow manual runs from the Actions tab
 
 permissions:
