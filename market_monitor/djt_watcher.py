@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+from openai import OpenAI
 
 sys.path.insert(0, str(Path(__file__).parent))
 from mailer import send_briefing
@@ -38,6 +39,37 @@ logger = logging.getLogger(__name__)
 API_BASE    = "https://truthsocial.com/api/v1"
 ACCOUNT_ID  = "107780257626128497"   # @realDonaldTrump
 STATE_FILE  = Path(__file__).parent / ".djt_seen_id"
+
+groq = OpenAI(
+    base_url="https://api.groq.com/openai/v1",
+    api_key=os.environ.get("GROQ_API_KEY", ""),
+)
+
+
+def groq_analyse(post_text: str) -> str:
+    """Return a short market/geopolitical analysis of a DJT post."""
+    try:
+        resp = groq.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a sharp financial and geopolitical analyst. "
+                        "When given a post by Donald Trump, give a concise 3-4 sentence analysis covering: "
+                        "1) what he's signalling, 2) likely market impact (sectors/assets), "
+                        "3) geopolitical implications if any. Be direct and specific. No fluff."
+                    ),
+                },
+                {"role": "user", "content": post_text},
+            ],
+            max_tokens=250,
+            temperature=0.4,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        logger.warning("Groq analysis failed: %s", e)
+        return ""
 
 
 def get_latest_posts(since_id: str | None = None, limit: int = 10) -> list[dict]:
@@ -92,12 +124,21 @@ def build_email(posts: list[dict]) -> tuple[str, str, str]:
 
         content = strip_html(post.get("content", ""))
         url = post.get("url", "https://truthsocial.com/@realDonaldTrump")
+        analysis = groq_analyse(content)
 
-        plain_lines.append(f"[{time_str}]\n{content}\n{url}\n")
+        analysis_plain = f"\n📊 Analysis:\n{analysis}" if analysis else ""
+        plain_lines.append(f"[{time_str}]\n{content}{analysis_plain}\n{url}\n")
+
+        analysis_html = (
+            f'<div style="margin-top:12px;padding:12px;background:#f0f4ff;border-left:3px solid #3b5bdb;border-radius:4px;font-size:14px;line-height:1.6;color:#333;">'
+            f'<strong style="color:#3b5bdb;">📊 Groq Analysis</strong><br>{analysis}</div>'
+        ) if analysis else ""
+
         html_parts.append(f"""
         <div style="margin-bottom:24px;padding:16px;background:#fff8f0;border-left:4px solid #b22234;border-radius:4px;font-family:Georgia,serif;">
           <div style="font-size:12px;color:#888;margin-bottom:8px;">{time_str}</div>
           <div style="font-size:17px;line-height:1.6;color:#111;">{post.get('content','')}</div>
+          {analysis_html}
           <div style="margin-top:10px;"><a href="{url}" style="font-size:12px;color:#b22234;">View on Truth Social →</a></div>
         </div>""")
 
