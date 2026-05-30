@@ -28,14 +28,20 @@ jobs:
       - name: Install dependencies
         run: pip install -r market_monitor/requirements.txt
 
-      - name: Run market monitor
+      - name: Run daily brief
         env:
-          GMAIL_USER:     ${{ secrets.GMAIL_USER }}
-          GMAIL_APP_PASS: ${{ secrets.GMAIL_APP_PASS }}
-          BRIEFING_TO:    ${{ secrets.BRIEFING_TO }}
+          GROQ_API_KEY:        ${{ secrets.GROQ_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          FTP_HOST:            ${{ secrets.FTP_HOST }}
+          FTP_USER:            ${{ secrets.FTP_USER }}
+          FTP_PASS:            ${{ secrets.FTP_PASS }}
+          FTP_PATH:            ${{ secrets.FTP_PATH }}
+          GMAIL_USER:          ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASS:      ${{ secrets.GMAIL_APP_PASS }}
+          BRIEFING_TO:         ${{ secrets.BRIEFING_TO }}
         run: |
           cd market_monitor
-          python main.py
+          python3 daily_brief.py
 
       - name: Commit updated briefings
         env:
