@@ -19,8 +19,8 @@ SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 
 
-def send_briefing(subject: str, body_text: str) -> bool:
-    """Send the plain-text briefing email. Returns True on success."""
+def send_briefing(subject: str, body_text: str, body_html: str = "") -> bool:
+    """Send the briefing email with HTML body. Returns True on success."""
     gmail_user = os.environ.get("GMAIL_USER", "").strip()
     gmail_pass = os.environ.get("GMAIL_APP_PASS", "").strip()
     recipients_raw = os.environ.get("BRIEFING_TO", "").strip()
@@ -38,7 +38,13 @@ def send_briefing(subject: str, body_text: str) -> bool:
     msg["Subject"] = subject
     msg["From"] = gmail_user
     msg["To"] = ", ".join(recipients)
+
+    # plain text fallback
     msg.attach(MIMEText(body_text, "plain"))
+
+    # HTML body — full magazine layout
+    if body_html:
+        msg.attach(MIMEText(body_html, "html"))
 
     try:
         with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=30) as server:
