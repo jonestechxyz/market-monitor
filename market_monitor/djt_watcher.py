@@ -1,22 +1,24 @@
 """
 DJT Truth Social watcher.
 
-Polls @realDonaldTrump's Truth Social feed every 15 minutes via the
-public Mastodon-compatible API. Emails immediately when new posts appear.
+Monitors Trump's posts via Google News RSS (Truth Social blocks API access).
+Emails within 15 minutes of a new post, with Groq market/geopolitical analysis.
 
 Usage:
     python djt_watcher.py
     python djt_watcher.py --dry-run   # print posts, no email
 
-State is stored in .djt_seen_id — the ID of the last post we emailed about.
+State is stored in .djt_seen_id — the GUID of the last article we emailed about.
 """
+from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import sys
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import requests
@@ -36,9 +38,8 @@ if _env.exists():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-API_BASE    = "https://truthsocial.com/api/v1"
-ACCOUNT_ID  = "107780257626128497"   # @realDonaldTrump
-STATE_FILE  = Path(__file__).parent / ".djt_seen_id"
+RSS_URL    = "https://news.google.com/rss/search?q=%22Trump%22+%22Truth+Social%22&hl=en-US&gl=US&ceid=US:en"
+STATE_FILE = Path(__file__).parent / ".djt_seen_id"
 
 groq = OpenAI(
     base_url="https://api.groq.com/openai/v1",
@@ -72,22 +73,34 @@ def groq_analyse(post_text: str) -> str:
         return ""
 
 
-def get_latest_posts(since_id: str | None = None, limit: int = 10) -> list[dict]:
-    params = {"limit": limit, "exclude_replies": "true", "exclude_reblogs": "false"}
-    if since_id:
-        params["since_id"] = since_id
+def get_latest_posts(seen_guid: str | None = None) -> list[dict]:
+    """Fetch recent Trump/Truth Social news items from Google News RSS."""
     try:
-        r = requests.get(
-            f"{API_BASE}/accounts/{ACCOUNT_ID}/statuses",
-            params=params,
-            timeout=15,
-            headers={"User-Agent": "Mozilla/5.0"},
-        )
+        r = requests.get(RSS_URL, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
         r.raise_for_status()
-        return r.json()
+        root = ET.fromstring(r.content)
     except Exception as e:
-        logger.error("Failed to fetch posts: %s", e)
+        logger.error("Failed to fetch RSS: %s", e)
         return []
+
+    items = []
+    for item in root.findall(".//item")[:10]:  # cap at 10 per run
+        guid = (item.findtext("guid") or "").strip()
+        if seen_guid and guid == seen_guid:
+            break  # stop at last seen
+        title   = item.findtext("title") or ""
+        link    = item.findtext("link") or ""
+        pub     = item.findtext("pubDate") or ""
+        source  = item.findtext("source") or ""
+        try:
+            dt = parsedate_to_datetime(pub)
+            time_str = dt.strftime("%H:%M UTC")
+        except Exception:
+            time_str = pub
+        items.append({"guid": guid, "title": title, "link": link,
+                      "time_str": time_str, "source": source})
+
+    return items
 
 
 def strip_html(text: str) -> str:
@@ -109,37 +122,33 @@ def save_seen_id(post_id: str):
 
 def build_email(posts: list[dict]) -> tuple[str, str, str]:
     count = len(posts)
-    subject = f"🇺🇸 DJT just posted on Truth Social ({count} new {'post' if count == 1 else 'posts'})"
+    subject = f"🇺🇸 DJT Truth Social Alert — {count} new {'story' if count == 1 else 'stories'}"
 
     plain_lines = []
     html_parts = []
 
     for post in reversed(posts):  # oldest first
-        ts = post.get("created_at", "")
-        try:
-            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            time_str = dt.strftime("%H:%M UTC")
-        except Exception:
-            time_str = ts
-
-        content = strip_html(post.get("content", ""))
-        url = post.get("url", "https://truthsocial.com/@realDonaldTrump")
-        analysis = groq_analyse(content)
+        title    = post["title"]
+        url      = post["link"]
+        time_str = post["time_str"]
+        source   = post["source"]
+        analysis = groq_analyse(title)
 
         analysis_plain = f"\n📊 Analysis:\n{analysis}" if analysis else ""
-        plain_lines.append(f"[{time_str}]\n{content}{analysis_plain}\n{url}\n")
+        plain_lines.append(f"[{time_str}] {source}\n{title}{analysis_plain}\n{url}\n")
 
         analysis_html = (
-            f'<div style="margin-top:12px;padding:12px;background:#f0f4ff;border-left:3px solid #3b5bdb;border-radius:4px;font-size:14px;line-height:1.6;color:#333;">'
+            f'<div style="margin-top:12px;padding:12px;background:#f0f4ff;border-left:3px solid #3b5bdb;'
+            f'border-radius:4px;font-size:14px;line-height:1.6;color:#333;">'
             f'<strong style="color:#3b5bdb;">📊 Groq Analysis</strong><br>{analysis}</div>'
         ) if analysis else ""
 
         html_parts.append(f"""
-        <div style="margin-bottom:24px;padding:16px;background:#fff8f0;border-left:4px solid #b22234;border-radius:4px;font-family:Georgia,serif;">
-          <div style="font-size:12px;color:#888;margin-bottom:8px;">{time_str}</div>
-          <div style="font-size:17px;line-height:1.6;color:#111;">{post.get('content','')}</div>
+        <div style="margin-bottom:24px;padding:16px;background:#fff8f0;border-left:4px solid #b22234;border-radius:4px;">
+          <div style="font-size:11px;color:#888;margin-bottom:6px;">{time_str} · {source}</div>
+          <div style="font-size:17px;font-weight:bold;line-height:1.4;color:#111;font-family:Georgia,serif;">{title}</div>
           {analysis_html}
-          <div style="margin-top:10px;"><a href="{url}" style="font-size:12px;color:#b22234;">View on Truth Social →</a></div>
+          <div style="margin-top:10px;"><a href="{url}" style="font-size:12px;color:#b22234;">Read article →</a></div>
         </div>""")
 
     html = f"""<!DOCTYPE html>
@@ -148,7 +157,7 @@ def build_email(posts: list[dict]) -> tuple[str, str, str]:
   <div style="max-width:600px;margin:0 auto;">
     <div style="background:#b22234;color:white;padding:16px 20px;border-radius:6px 6px 0 0;">
       <span style="font-size:22px;font-weight:bold;">🇺🇸 DJT Truth Social Alert</span>
-      <span style="float:right;font-size:13px;opacity:0.85;">{count} new {'post' if count == 1 else 'posts'}</span>
+      <span style="float:right;font-size:13px;opacity:0.85;">{count} new {'story' if count == 1 else 'stories'}</span>
     </div>
     <div style="background:white;padding:20px;border-radius:0 0 6px 6px;">
       {''.join(html_parts)}
@@ -160,16 +169,23 @@ def build_email(posts: list[dict]) -> tuple[str, str, str]:
 
 
 def main(dry_run: bool = False):
-    seen_id = load_seen_id()
-    logger.info("Last seen post ID: %s", seen_id or "none (first run)")
+    seen_guid = load_seen_id()
+    first_run = seen_guid is None
+    logger.info("Last seen GUID: %s", seen_guid or "none (first run)")
 
-    posts = get_latest_posts(since_id=seen_id)
+    posts = get_latest_posts(seen_guid=seen_guid)
 
     if not posts:
         logger.info("No new posts.")
         return
 
-    logger.info("Found %d new post(s)", len(posts))
+    # On first run, just bookmark the latest item — don't flood with old news
+    if first_run:
+        save_seen_id(posts[0]["guid"])
+        logger.info("First run — bookmarked latest GUID, no email sent.")
+        return
+
+    logger.info("Found %d new item(s)", len(posts))
 
     subject, plain, html = build_email(posts)
 
@@ -180,9 +196,8 @@ def main(dry_run: bool = False):
 
     send_briefing(subject, plain, html)
 
-    # save the newest post ID (first in list = most recent)
-    save_seen_id(posts[0]["id"])
-    logger.info("State updated to post ID %s", posts[0]["id"])
+    save_seen_id(posts[0]["guid"])
+    logger.info("State updated to GUID %s", posts[0]["guid"])
 
 
 if __name__ == "__main__":
