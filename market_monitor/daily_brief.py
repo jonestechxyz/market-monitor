@@ -88,6 +88,7 @@ NEWS_FEEDS = [
     {"section": "Global Markets",    "icon": "🌍", "query": "stock+market+OR+Fed+rates+OR+inflation+OR+\"market+rally\"+OR+\"market+crash\""},
     {"section": "China & Asia",      "icon": "🐉", "query": "China+economy+OR+China+tech+OR+China+trade+OR+\"Belt+and+Road\"+OR+Yuan"},
     {"section": "Energy & Climate",  "icon": "🔋", "query": "oil+price+OR+energy+stocks+OR+\"clean+energy\"+OR+\"electric+vehicles\"+OR+\"battery+technology\""},
+    {"section": "Apple Silicon",     "icon": "🍎", "query": "\"Apple+Silicon\"+OR+\"Mac+Mini\"+OR+\"Mac+Studio\"+OR+\"M4\"+OR+\"M5\"+OR+\"Apple+chip\"+launch+OR+release+OR+announced"},
 ]
 
 # ── IPO watchlist ──────────────────────────────────────────────────────────────
