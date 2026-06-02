@@ -1,9 +1,9 @@
 """
-AiArt Daily Gallery — daily AI-generated image gallery.
+AiArt Daily Gallery — top voted AI art of the day from Civitai.
 
-- Groq picks a daily theme and generates 20 unique prompt variations
-- Images generated on-demand via Pollinations.ai (free, no key needed)
-- Builds a dark masonry-grid HTML gallery with prompt-on-hover
+- Fetches top 20 most-reacted images from Civitai (no API key needed)
+- Groq writes a daily headline based on what came in
+- Builds a dark masonry-grid HTML gallery with prompt + stats on hover
 - FTP uploads to jonestech.xyz/AiArt.html
 
 Usage:
@@ -13,13 +13,11 @@ Usage:
 
 import argparse
 import ftplib
-import json
 import logging
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote
 
 import requests
 from openai import OpenAI
@@ -38,118 +36,109 @@ logger = logging.getLogger(__name__)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 OUTPUT_PATH  = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
 
+CIVITAI_API = (
+    "https://civitai.com/api/v1/images"
+    "?limit=30&sort=Most+Reactions&period=Day&nsfw=None&type=image"
+)
+
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
 
-THEME_CANDIDATES = [
-    "neon cyberpunk cities at night",
-    "ethereal fantasy landscapes with floating islands",
-    "ancient ruins reclaimed by nature",
-    "deep sea bioluminescent creatures",
-    "surreal dreamscape architecture",
-    "mystical forest spirits glowing",
-    "futuristic space colonies on alien worlds",
-    "baroque oil painting style robots",
-    "desert nomads in a post-apocalyptic world",
-    "macro photography of crystalline structures",
-    "art nouveau botanical gardens",
-    "noir detective rain-soaked streets",
-    "mythological gods in modern cities",
-    "aurora borealis over ice castles",
-    "steampunk clockwork cities",
-    "enchanted underwater kingdoms",
-    "retrofuturistic 1950s space age",
-    "dark gothic cathedrals with stained glass",
-    "hyperrealistic fruit and food still life",
-    "psychedelic fractal mandalas",
-    "lonely astronaut exploring alien landscapes",
-    "dragons over medieval cityscapes",
-    "minimalist zen gardens in fog",
-    "vibrant Indian festival of colors",
-    "biomechanical organisms fusing flesh and metal",
-    "abandoned amusement parks overgrown",
-    "celestial nebula skies over mountains",
-    "samurai in cherry blossom storms",
-    "art deco skyscrapers at golden hour",
-    "microscopic worlds inside water droplets",
-]
 
-# Aspect ratio sizes for visual variety in the masonry grid
-IMAGE_SIZES = [
-    (768, 1024),  # portrait
-    (1024, 768),  # landscape
-    (1024, 1024), # square
-    (768, 512),   # wide
-    (512, 768),   # tall
-]
+def fetch_civitai_images(count: int = 20) -> list[dict]:
+    """Fetch today's top-reacted AI images from Civitai."""
+    try:
+        r = requests.get(
+            CIVITAI_API,
+            timeout=20,
+            headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
+        )
+        r.raise_for_status()
+        items = r.json().get("items", [])
+        logger.info("Civitai returned %d images", len(items))
+
+        results = []
+        for img in items:
+            url = img.get("url", "")
+            if not url:
+                continue
+            meta   = img.get("meta") or {}
+            stats  = img.get("stats") or {}
+            prompt = meta.get("prompt", "")
+            hearts = stats.get("heartCount", 0)
+            likes  = stats.get("likeCount", 0)
+            total  = hearts + likes
+            results.append({
+                "url":      url,
+                "prompt":   prompt,
+                "width":    img.get("width", 512),
+                "height":   img.get("height", 512),
+                "hearts":   hearts,
+                "likes":    likes,
+                "total":    total,
+                "username": img.get("username", ""),
+            })
+            if len(results) >= count:
+                break
+
+        logger.info("Using %d images", len(results))
+        return results
+    except Exception as e:
+        logger.error("Civitai fetch failed: %s", e)
+        return []
 
 
-def pick_theme_and_prompts(date_str: str, count: int = 20) -> tuple[str, list[str]]:
-    """Use Groq to pick a theme and generate unique prompt variations for it."""
-    seed_theme = THEME_CANDIDATES[hash(date_str) % len(THEME_CANDIDATES)]
+def groq_headline(images: list[dict], date_str: str) -> str:
+    """Use Groq to write a punchy daily headline based on today's top images."""
+    prompts = [img["prompt"][:120] for img in images if img["prompt"]][:8]
+    if not prompts or not GROQ_API_KEY:
+        return "Today's Best AI Art"
     try:
         resp = groq.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are a creative AI art director. Return only valid JSON, no markdown, no code fences."},
-                {"role": "user", "content": f"""Today is {date_str}. Seed theme: '{seed_theme}'.
-
-Create a refined daily theme (5-8 words, vivid and specific), then generate {count} unique image prompts based on that theme.
-Each prompt should be 10-20 words, highly detailed, visually distinct from the others, and suitable for AI image generation.
-Mix portrait, landscape and square compositions. Include style cues (e.g. 'cinematic lighting', 'oil painting', 'photorealistic', '8k').
-
-Return ONLY this JSON:
-{{"theme": "the refined theme", "prompts": ["prompt 1", "prompt 2", ...]}}"""}
+                {"role": "system", "content": "You are a creative art curator. Return only the headline — no quotes, no punctuation at the end, no explanation."},
+                {"role": "user", "content": f"Today is {date_str}. Based on these AI image prompts from today's top voted gallery, write one evocative 4–7 word headline that captures the mood or dominant aesthetic:\n\n" + "\n".join(f"- {p}" for p in prompts)}
             ],
-            temperature=0.9,
-            max_tokens=1200,
+            temperature=0.8,
+            max_tokens=30,
         )
-        content = resp.choices[0].message.content.strip()
-        content = re.sub(r"^```[\w]*\n?", "", content).strip()
-        content = re.sub(r"\n?```$", "", content).strip()
-        data = json.loads(content)
-        theme = data.get("theme", seed_theme)
-        prompts = data.get("prompts", [])[:count]
-        logger.info("Theme: %s | %d prompts generated", theme, len(prompts))
-        return theme, prompts
+        headline = resp.choices[0].message.content.strip().strip('"\'').rstrip(".")
+        logger.info("Headline: %s", headline)
+        return headline
     except Exception as e:
-        logger.warning("Groq prompt generation failed, using seed theme: %s", e)
-        fallback_prompts = [f"{seed_theme}, variation {i+1}, cinematic lighting, 8k detailed" for i in range(count)]
-        return seed_theme, fallback_prompts
+        logger.warning("Groq headline failed: %s", e)
+        return "Today's Best AI Art"
 
 
-def make_pollinations_url(prompt: str, width: int = 1024, height: int = 768, seed: int = 42) -> str:
-    """Build a Pollinations.ai image URL for the given prompt."""
-    encoded = quote(prompt)
-    return f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&seed={seed}&nologo=true&enhance=true"
-
-
-def build_images(prompts: list[str]) -> list[dict]:
-    """Pair each prompt with a Pollinations URL and size."""
-    images = []
-    for i, prompt in enumerate(prompts):
-        w, h = IMAGE_SIZES[i % len(IMAGE_SIZES)]
-        url = make_pollinations_url(prompt, width=w, height=h, seed=i * 7 + 42)
-        images.append({"src": url, "prompt": prompt, "width": w, "height": h})
-    return images
-
-
-def build_html(images: list[dict], theme: str, date_str: str) -> str:
+def build_html(images: list[dict], headline: str, date_str: str) -> str:
     def safe(s: str) -> str:
         return s.replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
 
     cards_html = ""
     for img in images:
-        prompt_safe = safe(img["prompt"])
-        prompt_display = safe(img["prompt"][:140]) + ("…" if len(img["prompt"]) > 140 else "")
+        prompt_safe    = safe(img["prompt"][:300])
+        prompt_display = safe(img["prompt"][:160]) + ("…" if len(img["prompt"]) > 160 else "")
+        reactions_html = ""
+        if img["hearts"] or img["likes"]:
+            reactions_html = f'<div class="reactions">❤️ {img["hearts"]:,} &nbsp; 👍 {img["likes"]:,}</div>'
+        by_html = f'<div class="by">by {safe(img["username"])}</div>' if img["username"] else ""
+
+        # Use width param to get appropriately sized image from Civitai CDN
+        src = img["url"]
+        if "/width=" not in src:
+            src = re.sub(r"(https://image\.civitai\.com/[^/]+/)", r"\1width=800/", src)
+
         cards_html += f"""
     <div class="card">
-      <img src="{img['src']}" alt="{prompt_safe}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').style.display='none'">
+      <img src="{src}" alt="{prompt_safe}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').style.display='none'">
       <div class="overlay">
+        {reactions_html}
+        {by_html}
         <p class="prompt-text">{prompt_display}</p>
       </div>
     </div>"""
 
-    no_images_msg = "" if images else '<p style="color:#666;text-align:center;padding:80px 0;grid-column:1/-1">No images today. Try again later.</p>'
+    no_images_msg = "" if images else '<p style="color:#666;text-align:center;padding:80px 0;grid-column:1/-1">No images today. Civitai may be unavailable.</p>'
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -211,10 +200,7 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     color: #fff;
   }}
 
-  .header-title em {{
-    color: var(--accent);
-    font-style: italic;
-  }}
+  .header-title em {{ color: var(--accent); font-style: italic; }}
 
   .header-right {{ text-align: right; }}
 
@@ -235,14 +221,6 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     max-width: 1600px;
     margin: 0 auto;
     padding: 36px 24px 80px;
-  }}
-
-  .loading-note {{
-    text-align: center;
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-bottom: 28px;
-    font-style: italic;
   }}
 
   .masonry {{
@@ -271,34 +249,44 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     display: block;
     width: 100%;
     height: auto;
-    min-height: 180px;
     transition: filter 0.3s ease;
-    background: #1a1a1a;
   }}
 
-  .card:hover img {{
-    filter: brightness(0.35);
-  }}
+  .card:hover img {{ filter: brightness(0.3); }}
 
   .overlay {{
     position: absolute;
     inset: 0;
     padding: 16px;
     display: flex;
-    align-items: flex-end;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 6px;
     opacity: 0;
     transition: opacity 0.3s ease;
     pointer-events: none;
+    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 60%);
   }}
 
   .card:hover .overlay {{ opacity: 1; }}
 
-  .prompt-text {{
+  .reactions {{
     font-size: 12px;
-    line-height: 1.55;
-    color: rgba(255,255,255,0.92);
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+  }}
+
+  .by {{
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+  }}
+
+  .prompt-text {{
+    font-size: 11px;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.8);
     font-style: italic;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.9);
     word-break: break-word;
   }}
 
@@ -330,18 +318,17 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
 <div class="header">
   <div class="header-inner">
     <div>
-      <div class="site-name">AI Art Daily</div>
-      <h1 class="header-title"><em>{theme}</em></h1>
+      <div class="site-name">AI Art Daily · Top Voted</div>
+      <h1 class="header-title"><em>{headline}</em></h1>
     </div>
     <div class="header-right">
       <div class="header-date">{date_str}</div>
-      <div class="image-count">{len(images)} images · Pollinations.ai</div>
+      <div class="image-count">{len(images)} images · <a href="https://civitai.com" target="_blank" style="color:var(--accent2);text-decoration:none">Civitai</a></div>
     </div>
   </div>
 </div>
 
 <div class="gallery-wrap">
-  <p class="loading-note">Images generate on load — give them a moment to appear ✨</p>
   <div class="masonry">
     {cards_html}
     {no_images_msg}
@@ -349,7 +336,7 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
 </div>
 
 <div class="footer">
-  <span>Generated {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")} · Images via <a href="https://pollinations.ai" target="_blank">Pollinations.ai</a></span>
+  <span>Generated {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")} · Top voted AI art via <a href="https://civitai.com" target="_blank">Civitai</a></span>
   <span><a href="/daily.html">← Daily Brief</a></span>
 </div>
 
@@ -384,10 +371,10 @@ def main(dry_run: bool = False):
     date_str = datetime.now().strftime("%A %-d %B %Y")
     logger.info("🎨 Building AiArt Daily Gallery — %s", date_str)
 
-    theme, prompts = pick_theme_and_prompts(date_str, count=20)
-    images = build_images(prompts)
+    images   = fetch_civitai_images(count=20)
+    headline = groq_headline(images, date_str)
+    html     = build_html(images, headline, date_str)
 
-    html = build_html(images, theme, date_str)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     logger.info("✅ Saved to %s (%d images)", OUTPUT_PATH, len(images))
 
