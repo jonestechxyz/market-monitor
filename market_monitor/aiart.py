@@ -126,6 +126,9 @@ def build_html(headline: str, date_str: str, generated_at: str) -> str:
 <div class="gallery-wrap">
   <div id="status">Loading today's top scored AI art…</div>
   <div class="masonry" id="grid"></div>
+  <div style="text-align:center;padding:32px 0 0">
+    <button id="regen" onclick="loadImages(true)" style="background:#1a1a1a;color:#c084fc;border:1px solid #c084fc;padding:10px 28px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:0.05em;transition:background 0.15s" onmouseover="this.style.background='#2a1a3a'" onmouseout="this.style.background='#1a1a1a'">↻ Load New Batch</button>
+  </div>
 </div>
 
 <div class="footer">
@@ -138,11 +141,22 @@ const SKIP = new Set(["ai-generated","absurdres","highres","bad_id","bad_pixiv_i
   "bad_twitter_id","commentary","english_commentary","translated","jpeg_artifacts",
   "watermark","signature","artist_name"]);
 
-(async () => {{
+let currentPage = 1;
+
+async function loadImages(next) {{
   const status = document.getElementById('status');
   const grid   = document.getElementById('grid');
+  const btn    = document.getElementById('regen');
   const countLabel = document.getElementById('count-label');
-  const API = 'https://danbooru.donmai.us/posts.json?tags=ai-generated+rating:general+order:score&limit=30';
+
+  if (next) currentPage = Math.floor(Math.random() * 8) + 1;
+
+  grid.innerHTML = '';
+  status.style.display = 'block';
+  status.textContent = 'Loading…';
+  if (btn) btn.disabled = true;
+
+  const API = 'https://danbooru.donmai.us/posts.json?tags=ai-generated+rating:general+order:score&limit=30&page=' + currentPage;
 
   try {{
     const res = await fetch(API);
@@ -154,7 +168,7 @@ const SKIP = new Set(["ai-generated","absurdres","highres","bad_id","bad_pixiv_i
       return u && !['.mp4','.webm','.zip','.swf'].some(e => u.endsWith(e));
     }}).slice(0, 20);
 
-    if (!valid.length) {{ status.textContent = 'No images today.'; return; }}
+    if (!valid.length) {{ status.textContent = 'No images found.'; return; }}
 
     status.style.display = 'none';
     countLabel.innerHTML = valid.length + ' images · <a href="https://danbooru.donmai.us" target="_blank" style="color:var(--accent2);text-decoration:none">Danbooru</a>';
@@ -180,8 +194,12 @@ const SKIP = new Set(["ai-generated","absurdres","highres","bad_id","bad_pixiv_i
     }});
   }} catch(e) {{
     status.textContent = 'Could not load images: ' + e.message;
+  }} finally {{
+    if (btn) btn.disabled = false;
   }}
-}})();
+}}
+
+loadImages(false);
 </script>
 
 </body>
