@@ -1,9 +1,9 @@
 """
-AiArt Daily Gallery — top liked digital/AI art from Unsplash.
+AiArt Daily Gallery — top scored AI-generated art from Danbooru.
 
-- Groq picks today's art style theme
-- Fetches 20 images from Unsplash (existing UNSPLASH_ACCESS_KEY secret)
-- Builds a dark masonry-grid HTML gallery with prompt + stats on hover
+- Fetches top 20 scored ai-generated posts from Danbooru (no API key needed)
+- Groq writes a daily headline
+- Builds a dark masonry-grid HTML gallery with tags + score on hover
 - FTP uploads to jonestech.xyz/AiArt.html
 
 Usage:
@@ -32,147 +32,109 @@ if _env.exists():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY       = os.getenv("GROQ_API_KEY", "")
-UNSPLASH_KEY       = os.getenv("UNSPLASH_ACCESS_KEY", "")
-OUTPUT_PATH        = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
-UNSPLASH_SEARCH    = "https://api.unsplash.com/search/photos"
-UNSPLASH_RANDOM    = "https://api.unsplash.com/photos/random"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+OUTPUT_PATH  = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
+
+DANBOORU_URL = (
+    "https://danbooru.donmai.us/posts.json"
+    "?tags=ai-generated+rating:general+order:score"
+    "&limit=30"
+)
+
+# Tags to clean up for display (technical/meta tags)
+SKIP_TAGS = {
+    "ai-generated", "absurdres", "highres", "bad_id", "bad_pixiv_id",
+    "bad_twitter_id", "commentary", "english_commentary", "translated",
+    "jpeg_artifacts", "watermark", "signature", "artist_name",
+}
 
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
 
-THEME_SEEDS = [
-    "neon cyberpunk digital art",
-    "fantasy concept art",
-    "sci-fi space art",
-    "surreal dreamscape art",
-    "dark gothic illustration",
-    "futuristic city digital art",
-    "AI generated portrait art",
-    "abstract generative art",
-    "bioluminescent art",
-    "steampunk illustration",
-    "art nouveau digital",
-    "psychedelic fractal art",
-    "dark fantasy creature art",
-    "retro synthwave art",
-    "ethereal landscape art",
-    "cosmic nebula art",
-    "biomechanical art",
-    "magical realism illustration",
-    "noir digital illustration",
-    "hyperrealistic digital painting",
-]
+
+def fetch_danbooru_images(count: int = 20) -> list[dict]:
+    try:
+        r = requests.get(
+            DANBOORU_URL,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=20,
+        )
+        r.raise_for_status()
+        posts = r.json()
+        logger.info("Danbooru returned %d posts", len(posts))
+
+        results = []
+        for post in posts:
+            url = post.get("file_url", "")
+            # skip videos, webm, zip (ugoira)
+            if not url or any(url.endswith(ext) for ext in (".mp4", ".webm", ".zip", ".swf")):
+                continue
+            # use sample URL for large originals to keep page fast
+            src = post.get("large_file_url") or post.get("sample_file_url") or url
+
+            raw_tags = post.get("tag_string", "")
+            tags = [t for t in raw_tags.split() if t not in SKIP_TAGS][:12]
+
+            results.append({
+                "url":    src,
+                "score":  post.get("score", 0),
+                "tags":   tags,
+                "width":  post.get("image_width", 512),
+                "height": post.get("image_height", 512),
+                "id":     post.get("id", ""),
+            })
+            if len(results) >= count:
+                break
+
+        logger.info("Using %d images", len(results))
+        return results
+    except Exception as e:
+        logger.error("Danbooru fetch failed: %s", e)
+        return []
 
 
-def pick_theme(date_str: str) -> str:
-    seed = THEME_SEEDS[hash(date_str) % len(THEME_SEEDS)]
+def groq_headline(images: list[dict], date_str: str) -> str:
     if not GROQ_API_KEY:
-        return seed
+        return "Today's Best AI Art"
+    # pull a sample of descriptive tags to give Groq context
+    tag_sample = []
+    for img in images[:6]:
+        tag_sample.extend(img["tags"][:4])
+    tag_str = ", ".join(dict.fromkeys(tag_sample))[:200]
     try:
         resp = groq.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "Return only a short search phrase (3-5 words) for finding beautiful AI/digital art images. No punctuation, no quotes."},
-                {"role": "user",   "content": f"Today is {date_str}. Starting from '{seed}', give me one evocative 3-5 word search phrase for today's AI art gallery."}
+                {"role": "system", "content": "You are a creative art curator. Return only the headline — 3 to 6 words, evocative, no quotes, no punctuation at end."},
+                {"role": "user",   "content": f"Today is {date_str}. Write a poetic 3–6 word magazine-style headline for a daily gallery of today's top voted AI-generated illustrations. These tags describe the art: {tag_str}"}
             ],
-            temperature=0.85, max_tokens=15,
+            temperature=0.85,
+            max_tokens=20,
         )
-        theme = resp.choices[0].message.content.strip().strip('"\'').rstrip(".")
-        logger.info("Theme: %s", theme)
-        return theme
+        headline = resp.choices[0].message.content.strip().strip('"\'').rstrip(".")
+        logger.info("Headline: %s", headline)
+        return headline
     except Exception as e:
-        logger.warning("Groq theme failed: %s", e)
-        return seed
+        logger.warning("Groq headline failed: %s", e)
+        return "Today's Best AI Art"
 
 
-def fetch_unsplash_images(theme: str, count: int = 20) -> list[dict]:
-    if not UNSPLASH_KEY:
-        logger.error("UNSPLASH_ACCESS_KEY not set")
-        return []
-
-    headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
-    images  = []
-
-    # Search for the theme
-    try:
-        r = requests.get(
-            UNSPLASH_SEARCH,
-            headers=headers,
-            params={"query": theme, "per_page": count, "order_by": "relevant", "orientation": "all"},
-            timeout=15,
-        )
-        r.raise_for_status()
-        results = r.json().get("results", [])
-        logger.info("Unsplash returned %d results for '%s'", len(results), theme)
-        for img in results:
-            urls = img.get("urls", {})
-            src  = urls.get("regular") or urls.get("full") or ""
-            if not src:
-                continue
-            user  = img.get("user", {})
-            likes = img.get("likes", 0)
-            desc  = img.get("description") or img.get("alt_description") or ""
-            images.append({
-                "url":      src,
-                "desc":     desc[:200],
-                "likes":    likes,
-                "username": user.get("name", ""),
-                "profile":  user.get("links", {}).get("html", ""),
-                "width":    img.get("width", 800),
-                "height":   img.get("height", 600),
-            })
-    except Exception as e:
-        logger.error("Unsplash search failed: %s", e)
-
-    # Top up with random if needed
-    if len(images) < count:
-        try:
-            r = requests.get(
-                UNSPLASH_RANDOM,
-                headers=headers,
-                params={"query": theme, "count": count - len(images), "orientation": "all"},
-                timeout=15,
-            )
-            r.raise_for_status()
-            for img in r.json():
-                urls = img.get("urls", {})
-                src  = urls.get("regular") or ""
-                if src:
-                    user = img.get("user", {})
-                    images.append({
-                        "url":      src,
-                        "desc":     (img.get("description") or img.get("alt_description") or "")[:200],
-                        "likes":    img.get("likes", 0),
-                        "username": user.get("name", ""),
-                        "profile":  user.get("links", {}).get("html", ""),
-                        "width":    img.get("width", 800),
-                        "height":   img.get("height", 600),
-                    })
-        except Exception as e:
-            logger.warning("Unsplash random top-up failed: %s", e)
-
-    logger.info("Using %d images", len(images))
-    return images[:count]
-
-
-def build_html(images: list[dict], theme: str, date_str: str, generated_at: str) -> str:
+def build_html(images: list[dict], headline: str, date_str: str, generated_at: str) -> str:
     def safe(s: str) -> str:
         return s.replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
 
     cards_html = ""
     for img in images:
-        desc_safe    = safe(img["desc"])
-        desc_display = safe(img["desc"][:160]) + ("…" if len(img["desc"]) > 160 else "")
-        likes_html   = f'<div class="reactions">❤️ {img["likes"]:,}</div>' if img["likes"] else ""
-        profile_url  = img["profile"] or "https://unsplash.com"
-        by_html      = f'<div class="by"><a href="{profile_url}?utm_source=aiart&utm_medium=referral" target="_blank">{safe(img["username"])}</a></div>' if img["username"] else ""
+        tags_display = ", ".join(t.replace("_", " ") for t in img["tags"][:8])
+        tags_safe    = safe(tags_display)
+        score_html   = f'<div class="score">▲ {img["score"]:,}</div>' if img["score"] else ""
+        post_url     = f"https://danbooru.donmai.us/posts/{img['id']}"
+
         cards_html += f"""
-    <div class="card">
-      <img src="{img['url']}" alt="{desc_safe}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').remove()">
+    <div class="card" onclick="window.open('{post_url}','_blank')">
+      <img src="{img['url']}" alt="{tags_safe}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').remove()">
       <div class="overlay">
-        {likes_html}
-        {by_html}
-        {"<p class='prompt-text'>" + desc_display + "</p>" if desc_display else ""}
+        {score_html}
+        {"<p class='tags'>" + tags_safe + "</p>" if tags_safe else ""}
       </div>
     </div>"""
 
@@ -210,13 +172,10 @@ def build_html(images: list[dict], theme: str, date_str: str, generated_at: str)
   .card img {{ display: block; width: 100%; height: auto; transition: filter 0.3s ease; }}
   .card:hover img {{ filter: brightness(0.3); }}
 
-  .overlay {{ position: absolute; inset: 0; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 65%); }}
-  .card:hover .overlay {{ opacity: 1; pointer-events: auto; }}
-  .reactions {{ font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.9); }}
-  .by {{ font-size: 11px; color: var(--accent); font-weight: 600; }}
-  .by a {{ color: var(--accent); text-decoration: none; }}
-  .by a:hover {{ text-decoration: underline; }}
-  .prompt-text {{ font-size: 11px; line-height: 1.5; color: rgba(255,255,255,0.8); font-style: italic; word-break: break-word; }}
+  .overlay {{ position: absolute; inset: 0; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 60%); }}
+  .card:hover .overlay {{ opacity: 1; }}
+  .score {{ font-size: 13px; font-weight: 700; color: var(--accent); }}
+  .tags {{ font-size: 11px; line-height: 1.6; color: rgba(255,255,255,0.8); font-style: italic; word-break: break-word; }}
 
   .footer {{ border-top: 1px solid var(--border); padding: 20px 40px; max-width: 1600px; margin: 0 auto; display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); }}
   .footer a {{ color: var(--accent2); text-decoration: none; }}
@@ -236,12 +195,12 @@ def build_html(images: list[dict], theme: str, date_str: str, generated_at: str)
 <div class="header">
   <div class="header-inner">
     <div>
-      <div class="site-name">AI Art Daily</div>
-      <h1 class="header-title"><em>{theme}</em></h1>
+      <div class="site-name">AI Art Daily · Top Scored</div>
+      <h1 class="header-title"><em>{headline}</em></h1>
     </div>
     <div class="header-right">
       <div class="header-date">{date_str}</div>
-      <div class="image-count">{len(images)} images · <a href="https://unsplash.com?utm_source=aiart&utm_medium=referral" target="_blank" style="color:var(--accent2);text-decoration:none">Unsplash</a></div>
+      <div class="image-count">{len(images)} images · <a href="https://danbooru.donmai.us" target="_blank" style="color:var(--accent2);text-decoration:none">Danbooru</a></div>
     </div>
   </div>
 </div>
@@ -254,7 +213,7 @@ def build_html(images: list[dict], theme: str, date_str: str, generated_at: str)
 </div>
 
 <div class="footer">
-  <span>Updated {generated_at} · Photos via <a href="https://unsplash.com?utm_source=aiart&utm_medium=referral" target="_blank">Unsplash</a></span>
+  <span>Updated {generated_at} · AI art via <a href="https://danbooru.donmai.us" target="_blank">Danbooru</a></span>
   <span><a href="/daily.html">← Daily Brief</a></span>
 </div>
 
@@ -289,9 +248,9 @@ def main(dry_run: bool = False):
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     logger.info("🎨 Building AiArt Daily Gallery — %s", date_str)
 
-    theme  = pick_theme(date_str)
-    images = fetch_unsplash_images(theme, count=20)
-    html   = build_html(images, theme, date_str, generated_at)
+    images   = fetch_danbooru_images(count=20)
+    headline = groq_headline(images, date_str)
+    html     = build_html(images, headline, date_str, generated_at)
 
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     logger.info("✅ Saved to %s (%d images)", OUTPUT_PATH, len(images))
