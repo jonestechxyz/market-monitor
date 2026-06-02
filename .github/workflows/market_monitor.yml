@@ -39,6 +39,7 @@ jobs:
           GMAIL_USER:          ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASS:      ${{ secrets.GMAIL_APP_PASS }}
           BRIEFING_TO:         ${{ secrets.BRIEFING_TO }}
+          OUTPUT_PATH:         /tmp/daily.html
         run: |
           cd market_monitor
           python3 daily_brief.py
