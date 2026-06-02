@@ -1,9 +1,9 @@
 """
-AiArt Daily Gallery — best AI-generated images from Lexica.art.
+AiArt Daily Gallery — daily AI-generated image gallery.
 
-- Groq picks a daily theme (seeded by date for variety)
-- Fetches top images from Lexica.art free API
-- Builds a dark masonry-grid HTML gallery
+- Groq picks a daily theme and generates 20 unique prompt variations
+- Images generated on-demand via Pollinations.ai (free, no key needed)
+- Builds a dark masonry-grid HTML gallery with prompt-on-hover
 - FTP uploads to jonestech.xyz/AiArt.html
 
 Usage:
@@ -13,12 +13,13 @@ Usage:
 
 import argparse
 import ftplib
+import json
 import logging
 import os
-import random
-import sys
+import re
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 from openai import OpenAI
@@ -36,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 OUTPUT_PATH  = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
-LEXICA_API   = "https://lexica.art/api/v1/search?q={query}&n=30"
 
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
 
@@ -73,54 +73,64 @@ THEME_CANDIDATES = [
     "microscopic worlds inside water droplets",
 ]
 
+# Aspect ratio sizes for visual variety in the masonry grid
+IMAGE_SIZES = [
+    (768, 1024),  # portrait
+    (1024, 768),  # landscape
+    (1024, 1024), # square
+    (768, 512),   # wide
+    (512, 768),   # tall
+]
 
-def pick_theme_with_groq(date_str: str) -> str:
-    """Use Groq to pick and riff on a theme, seeded by today's date."""
+
+def pick_theme_and_prompts(date_str: str, count: int = 20) -> tuple[str, list[str]]:
+    """Use Groq to pick a theme and generate unique prompt variations for it."""
     seed_theme = THEME_CANDIDATES[hash(date_str) % len(THEME_CANDIDATES)]
     try:
         resp = groq.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are a creative AI art director. Return only the theme phrase — no preamble, no quotes, no punctuation at the end."},
-                {"role": "user", "content": f"Today is {date_str}. Starting from this seed theme: '{seed_theme}' — give me one vivid, specific AI image search theme (5–10 words). Make it evocative and unique to today."}
+                {"role": "system", "content": "You are a creative AI art director. Return only valid JSON, no markdown, no code fences."},
+                {"role": "user", "content": f"""Today is {date_str}. Seed theme: '{seed_theme}'.
+
+Create a refined daily theme (5-8 words, vivid and specific), then generate {count} unique image prompts based on that theme.
+Each prompt should be 10-20 words, highly detailed, visually distinct from the others, and suitable for AI image generation.
+Mix portrait, landscape and square compositions. Include style cues (e.g. 'cinematic lighting', 'oil painting', 'photorealistic', '8k').
+
+Return ONLY this JSON:
+{{"theme": "the refined theme", "prompts": ["prompt 1", "prompt 2", ...]}}"""}
             ],
-            temperature=0.85,
-            max_tokens=40,
+            temperature=0.9,
+            max_tokens=1200,
         )
-        theme = resp.choices[0].message.content.strip().strip('"\'').rstrip(".")
-        logger.info("Groq theme: %s", theme)
-        return theme
+        content = resp.choices[0].message.content.strip()
+        content = re.sub(r"^```[\w]*\n?", "", content).strip()
+        content = re.sub(r"\n?```$", "", content).strip()
+        data = json.loads(content)
+        theme = data.get("theme", seed_theme)
+        prompts = data.get("prompts", [])[:count]
+        logger.info("Theme: %s | %d prompts generated", theme, len(prompts))
+        return theme, prompts
     except Exception as e:
-        logger.warning("Groq theme selection failed, using seed: %s", e)
-        return seed_theme
+        logger.warning("Groq prompt generation failed, using seed theme: %s", e)
+        fallback_prompts = [f"{seed_theme}, variation {i+1}, cinematic lighting, 8k detailed" for i in range(count)]
+        return seed_theme, fallback_prompts
 
 
-def fetch_lexica_images(theme: str, count: int = 20) -> list[dict]:
-    """Fetch images from Lexica.art for the given theme."""
-    try:
-        url = LEXICA_API.format(query=requests.utils.quote(theme))
-        r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-        r.raise_for_status()
-        data = r.json()
-        images = data.get("images", [])
-        logger.info("Lexica returned %d images", len(images))
+def make_pollinations_url(prompt: str, width: int = 1024, height: int = 768, seed: int = 42) -> str:
+    """Build a Pollinations.ai image URL for the given prompt."""
+    encoded = quote(prompt)
+    return f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&seed={seed}&nologo=true&enhance=true"
 
-        results = []
-        for img in images:
-            src = img.get("src") or img.get("srcSmall") or ""
-            prompt = img.get("prompt", "")
-            width = img.get("width", 512)
-            height = img.get("height", 512)
-            if src and src.startswith("http"):
-                results.append({"src": src, "prompt": prompt, "width": width, "height": height})
-            if len(results) >= count:
-                break
 
-        logger.info("Using %d images", len(results))
-        return results
-    except Exception as e:
-        logger.error("Lexica fetch failed: %s", e)
-        return []
+def build_images(prompts: list[str]) -> list[dict]:
+    """Pair each prompt with a Pollinations URL and size."""
+    images = []
+    for i, prompt in enumerate(prompts):
+        w, h = IMAGE_SIZES[i % len(IMAGE_SIZES)]
+        url = make_pollinations_url(prompt, width=w, height=h, seed=i * 7 + 42)
+        images.append({"src": url, "prompt": prompt, "width": w, "height": h})
+    return images
 
 
 def build_html(images: list[dict], theme: str, date_str: str) -> str:
@@ -129,17 +139,17 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
 
     cards_html = ""
     for img in images:
-        prompt_safe = safe(img["prompt"][:200])
-        prompt_display = safe(img["prompt"][:120]) + ("…" if len(img["prompt"]) > 120 else "")
+        prompt_safe = safe(img["prompt"])
+        prompt_display = safe(img["prompt"][:140]) + ("…" if len(img["prompt"]) > 140 else "")
         cards_html += f"""
     <div class="card">
-      <img src="{img['src']}" alt="{prompt_safe}" loading="lazy" onerror="this.closest('.card').style.display='none'">
+      <img src="{img['src']}" alt="{prompt_safe}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').style.display='none'">
       <div class="overlay">
         <p class="prompt-text">{prompt_display}</p>
       </div>
     </div>"""
 
-    no_images_msg = "" if images else '<p style="color:#666;text-align:center;padding:80px 0;grid-column:1/-1">No images found for today\'s theme. Try again later.</p>'
+    no_images_msg = "" if images else '<p style="color:#666;text-align:center;padding:80px 0;grid-column:1/-1">No images today. Try again later.</p>'
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -168,7 +178,6 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     min-height: 100vh;
   }}
 
-  /* HEADER */
   .header {{
     padding: 48px 40px 36px;
     border-bottom: 1px solid var(--border);
@@ -207,9 +216,7 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     font-style: italic;
   }}
 
-  .header-right {{
-    text-align: right;
-  }}
+  .header-right {{ text-align: right; }}
 
   .header-date {{
     font-size: 13px;
@@ -224,11 +231,18 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     letter-spacing: 0.08em;
   }}
 
-  /* GALLERY */
   .gallery-wrap {{
     max-width: 1600px;
     margin: 0 auto;
     padding: 36px 24px 80px;
+  }}
+
+  .loading-note {{
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 28px;
+    font-style: italic;
   }}
 
   .masonry {{
@@ -257,7 +271,9 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     display: block;
     width: 100%;
     height: auto;
+    min-height: 180px;
     transition: filter 0.3s ease;
+    background: #1a1a1a;
   }}
 
   .card:hover img {{
@@ -275,9 +291,7 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     pointer-events: none;
   }}
 
-  .card:hover .overlay {{
-    opacity: 1;
-  }}
+  .card:hover .overlay {{ opacity: 1; }}
 
   .prompt-text {{
     font-size: 12px;
@@ -288,7 +302,6 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     word-break: break-word;
   }}
 
-  /* FOOTER */
   .footer {{
     border-top: 1px solid var(--border);
     padding: 20px 40px;
@@ -322,12 +335,13 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
     </div>
     <div class="header-right">
       <div class="header-date">{date_str}</div>
-      <div class="image-count">{len(images)} images · Lexica.art</div>
+      <div class="image-count">{len(images)} images · Pollinations.ai</div>
     </div>
   </div>
 </div>
 
 <div class="gallery-wrap">
+  <p class="loading-note">Images generate on load — give them a moment to appear ✨</p>
   <div class="masonry">
     {cards_html}
     {no_images_msg}
@@ -335,7 +349,7 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
 </div>
 
 <div class="footer">
-  <span>Generated {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")} · Images via <a href="https://lexica.art" target="_blank">Lexica.art</a></span>
+  <span>Generated {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")} · Images via <a href="https://pollinations.ai" target="_blank">Pollinations.ai</a></span>
   <span><a href="/daily.html">← Daily Brief</a></span>
 </div>
 
@@ -370,15 +384,12 @@ def main(dry_run: bool = False):
     date_str = datetime.now().strftime("%A %-d %B %Y")
     logger.info("🎨 Building AiArt Daily Gallery — %s", date_str)
 
-    theme = pick_theme_with_groq(date_str)
-    images = fetch_lexica_images(theme, count=20)
-
-    if not images:
-        logger.warning("No images fetched — building placeholder page")
+    theme, prompts = pick_theme_and_prompts(date_str, count=20)
+    images = build_images(prompts)
 
     html = build_html(images, theme, date_str)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
-    logger.info("✅ Saved to %s", OUTPUT_PATH)
+    logger.info("✅ Saved to %s (%d images)", OUTPUT_PATH, len(images))
 
     if dry_run:
         logger.info("Dry run — skipping FTP upload")
