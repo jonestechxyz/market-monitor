@@ -196,18 +196,25 @@ def ftp_upload(local_path: Path, remote_filename: str = "AiArt.html"):
     if not all([host, user, pwd]):
         logger.warning("FTP credentials not set — skipping upload")
         return False
-    try:
-        with ftplib.FTP_TLS(host, timeout=30) as ftp:
-            ftp.login(user, pwd)
-            ftp.prot_p()
-            ftp.cwd(path)
-            with open(local_path, "rb") as f:
-                ftp.storbinary(f"STOR {remote_filename}", f)
-        logger.info("✅ Uploaded to https://jonestech.xyz/%s", remote_filename)
-        return True
-    except Exception as e:
-        logger.error("FTP upload failed: %s", e)
-        return False
+
+    # Try plain FTP first (more reliable from CI runners), then FTPS
+    for use_tls in (False, True):
+        try:
+            cls = ftplib.FTP_TLS if use_tls else ftplib.FTP
+            with cls(host, timeout=60) as ftp:
+                ftp.login(user, pwd)
+                if use_tls:
+                    ftp.prot_p()
+                ftp.cwd(path)
+                with open(local_path, "rb") as f:
+                    ftp.storbinary(f"STOR {remote_filename}", f)
+            logger.info("✅ Uploaded to https://jonestech.xyz/%s (tls=%s)", remote_filename, use_tls)
+            return True
+        except Exception as e:
+            logger.warning("FTP upload failed (tls=%s): %s", use_tls, e)
+
+    logger.error("All FTP attempts failed")
+    return False
 
 
 def main(dry_run: bool = False):
