@@ -1,8 +1,8 @@
 """
-AiArt Daily Gallery — top voted AI art of the day from Civitai.
+AiArt Daily Gallery — top liked digital/AI art from Unsplash.
 
-- Fetches top 20 most-reacted images from Civitai with browser headers
-- Groq writes a daily headline
+- Groq picks today's art style theme
+- Fetches 20 images from Unsplash (existing UNSPLASH_ACCESS_KEY secret)
 - Builds a dark masonry-grid HTML gallery with prompt + stats on hover
 - FTP uploads to jonestech.xyz/AiArt.html
 
@@ -15,8 +15,6 @@ import argparse
 import ftplib
 import logging
 import os
-import re
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,123 +32,151 @@ if _env.exists():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-OUTPUT_PATH  = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
-
-CIVITAI_URL = (
-    "https://civitai.com/api/v1/images"
-    "?limit=30&sort=Most+Reactions&period=Day&nsfw=None&type=image"
-)
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://civitai.com/images",
-    "Origin": "https://civitai.com",
-}
+GROQ_API_KEY       = os.getenv("GROQ_API_KEY", "")
+UNSPLASH_KEY       = os.getenv("UNSPLASH_ACCESS_KEY", "")
+OUTPUT_PATH        = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
+UNSPLASH_SEARCH    = "https://api.unsplash.com/search/photos"
+UNSPLASH_RANDOM    = "https://api.unsplash.com/photos/random"
 
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
 
-FALLBACK_HEADLINES = [
-    "Dreams in Silicon", "Visions of Tomorrow", "Worlds Unseen",
-    "The Digital Canvas", "Neural Landscapes", "Synthetic Beauty",
+THEME_SEEDS = [
+    "neon cyberpunk digital art",
+    "fantasy concept art",
+    "sci-fi space art",
+    "surreal dreamscape art",
+    "dark gothic illustration",
+    "futuristic city digital art",
+    "AI generated portrait art",
+    "abstract generative art",
+    "bioluminescent art",
+    "steampunk illustration",
+    "art nouveau digital",
+    "psychedelic fractal art",
+    "dark fantasy creature art",
+    "retro synthwave art",
+    "ethereal landscape art",
+    "cosmic nebula art",
+    "biomechanical art",
+    "magical realism illustration",
+    "noir digital illustration",
+    "hyperrealistic digital painting",
 ]
 
 
-def fetch_civitai_images(count: int = 20) -> list[dict]:
-    """Fetch today's top-reacted AI images from Civitai."""
-    for attempt in range(3):
-        try:
-            if attempt:
-                time.sleep(3)
-            r = requests.get(CIVITAI_URL, headers=HEADERS, timeout=25)
-            logger.info("Civitai status: %d", r.status_code)
-            r.raise_for_status()
-            items = r.json().get("items", [])
-            logger.info("Civitai returned %d items", len(items))
-
-            results = []
-            for img in items:
-                url = img.get("url", "")
-                if not url:
-                    continue
-                meta   = img.get("meta") or {}
-                stats  = img.get("stats") or {}
-                prompt = meta.get("prompt", "")
-                hearts = stats.get("heartCount", 0)
-                likes  = stats.get("likeCount", 0)
-                # resize via CDN width param
-                if "/width=" not in url:
-                    url = re.sub(r"(https://image\.civitai\.com/[^/]+/)", r"\1width=800/", url)
-                results.append({
-                    "url":      url,
-                    "prompt":   prompt,
-                    "width":    img.get("width", 512),
-                    "height":   img.get("height", 512),
-                    "hearts":   hearts,
-                    "likes":    likes,
-                    "username": img.get("username", ""),
-                })
-                if len(results) >= count:
-                    break
-
-            logger.info("Using %d images", len(results))
-            return results
-
-        except Exception as e:
-            logger.warning("Civitai attempt %d failed: %s", attempt + 1, e)
-
-    logger.error("All Civitai attempts failed")
-    return []
-
-
-def groq_headline(date_str: str, images: list[dict]) -> str:
+def pick_theme(date_str: str) -> str:
+    seed = THEME_SEEDS[hash(date_str) % len(THEME_SEEDS)]
     if not GROQ_API_KEY:
-        return FALLBACK_HEADLINES[hash(date_str) % len(FALLBACK_HEADLINES)]
-    prompts = [img["prompt"][:100] for img in images if img.get("prompt")][:6]
-    context = ("\n".join(f"- {p}" for p in prompts)) if prompts else "top voted AI art of the day"
+        return seed
     try:
         resp = groq.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are a creative art curator. Return only the headline — 3 to 6 words, evocative, no quotes, no punctuation at end."},
-                {"role": "user",   "content": f"Today is {date_str}. Write a poetic 3–6 word headline for a daily gallery of today's top voted AI-generated images. Context from today's prompts:\n{context}"}
+                {"role": "system", "content": "Return only a short search phrase (3-5 words) for finding beautiful AI/digital art images. No punctuation, no quotes."},
+                {"role": "user",   "content": f"Today is {date_str}. Starting from '{seed}', give me one evocative 3-5 word search phrase for today's AI art gallery."}
             ],
-            temperature=0.85,
-            max_tokens=20,
+            temperature=0.85, max_tokens=15,
         )
-        headline = resp.choices[0].message.content.strip().strip('"\'').rstrip(".")
-        logger.info("Headline: %s", headline)
-        return headline
+        theme = resp.choices[0].message.content.strip().strip('"\'').rstrip(".")
+        logger.info("Theme: %s", theme)
+        return theme
     except Exception as e:
-        logger.warning("Groq headline failed: %s", e)
-        return FALLBACK_HEADLINES[hash(date_str) % len(FALLBACK_HEADLINES)]
+        logger.warning("Groq theme failed: %s", e)
+        return seed
 
 
-def build_html(images: list[dict], headline: str, date_str: str, generated_at: str) -> str:
+def fetch_unsplash_images(theme: str, count: int = 20) -> list[dict]:
+    if not UNSPLASH_KEY:
+        logger.error("UNSPLASH_ACCESS_KEY not set")
+        return []
+
+    headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
+    images  = []
+
+    # Search for the theme
+    try:
+        r = requests.get(
+            UNSPLASH_SEARCH,
+            headers=headers,
+            params={"query": theme, "per_page": count, "order_by": "relevant", "orientation": "all"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        results = r.json().get("results", [])
+        logger.info("Unsplash returned %d results for '%s'", len(results), theme)
+        for img in results:
+            urls = img.get("urls", {})
+            src  = urls.get("regular") or urls.get("full") or ""
+            if not src:
+                continue
+            user  = img.get("user", {})
+            likes = img.get("likes", 0)
+            desc  = img.get("description") or img.get("alt_description") or ""
+            images.append({
+                "url":      src,
+                "desc":     desc[:200],
+                "likes":    likes,
+                "username": user.get("name", ""),
+                "profile":  user.get("links", {}).get("html", ""),
+                "width":    img.get("width", 800),
+                "height":   img.get("height", 600),
+            })
+    except Exception as e:
+        logger.error("Unsplash search failed: %s", e)
+
+    # Top up with random if needed
+    if len(images) < count:
+        try:
+            r = requests.get(
+                UNSPLASH_RANDOM,
+                headers=headers,
+                params={"query": theme, "count": count - len(images), "orientation": "all"},
+                timeout=15,
+            )
+            r.raise_for_status()
+            for img in r.json():
+                urls = img.get("urls", {})
+                src  = urls.get("regular") or ""
+                if src:
+                    user = img.get("user", {})
+                    images.append({
+                        "url":      src,
+                        "desc":     (img.get("description") or img.get("alt_description") or "")[:200],
+                        "likes":    img.get("likes", 0),
+                        "username": user.get("name", ""),
+                        "profile":  user.get("links", {}).get("html", ""),
+                        "width":    img.get("width", 800),
+                        "height":   img.get("height", 600),
+                    })
+        except Exception as e:
+            logger.warning("Unsplash random top-up failed: %s", e)
+
+    logger.info("Using %d images", len(images))
+    return images[:count]
+
+
+def build_html(images: list[dict], theme: str, date_str: str, generated_at: str) -> str:
     def safe(s: str) -> str:
         return s.replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
 
     cards_html = ""
     for img in images:
-        prompt_safe    = safe(img["prompt"][:300])
-        prompt_display = safe(img["prompt"][:160]) + ("…" if len(img["prompt"]) > 160 else "")
-        reactions = ""
-        if img["hearts"] or img["likes"]:
-            reactions = f'<div class="reactions">❤️ {img["hearts"]:,} &nbsp; 👍 {img["likes"]:,}</div>'
-        by = f'<div class="by">by {safe(img["username"])}</div>' if img["username"] else ""
+        desc_safe    = safe(img["desc"])
+        desc_display = safe(img["desc"][:160]) + ("…" if len(img["desc"]) > 160 else "")
+        likes_html   = f'<div class="reactions">❤️ {img["likes"]:,}</div>' if img["likes"] else ""
+        profile_url  = img["profile"] or "https://unsplash.com"
+        by_html      = f'<div class="by"><a href="{profile_url}?utm_source=aiart&utm_medium=referral" target="_blank">{safe(img["username"])}</a></div>' if img["username"] else ""
         cards_html += f"""
     <div class="card">
-      <img src="{img['url']}" alt="{prompt_safe}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').remove()">
+      <img src="{img['url']}" alt="{desc_safe}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').remove()">
       <div class="overlay">
-        {reactions}
-        {by}
-        {"<p class='prompt-text'>" + prompt_display + "</p>" if prompt_display else ""}
+        {likes_html}
+        {by_html}
+        {"<p class='prompt-text'>" + desc_display + "</p>" if desc_display else ""}
       </div>
     </div>"""
 
-    no_images = "" if images else '<p style="color:#666;text-align:center;padding:80px 0">No images today — Civitai may be unavailable.</p>'
+    no_images = "" if images else '<p style="color:#666;text-align:center;padding:80px 0">No images today.</p>'
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -174,7 +200,7 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
   .header-title em {{ color: var(--accent); font-style: italic; }}
   .header-right {{ text-align: right; }}
   .header-date {{ font-size: 13px; color: var(--text-dim); font-weight: 500; margin-bottom: 6px; }}
-  .image-count {{ font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em; }}
+  .image-count {{ font-size: 11px; color: var(--text-dim); }}
 
   .gallery-wrap {{ max-width: 1600px; margin: 0 auto; padding: 36px 24px 80px; }}
   .masonry {{ columns: 4 280px; column-gap: 14px; }}
@@ -185,9 +211,11 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
   .card:hover img {{ filter: brightness(0.3); }}
 
   .overlay {{ position: absolute; inset: 0; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 65%); }}
-  .card:hover .overlay {{ opacity: 1; }}
+  .card:hover .overlay {{ opacity: 1; pointer-events: auto; }}
   .reactions {{ font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.9); }}
   .by {{ font-size: 11px; color: var(--accent); font-weight: 600; }}
+  .by a {{ color: var(--accent); text-decoration: none; }}
+  .by a:hover {{ text-decoration: underline; }}
   .prompt-text {{ font-size: 11px; line-height: 1.5; color: rgba(255,255,255,0.8); font-style: italic; word-break: break-word; }}
 
   .footer {{ border-top: 1px solid var(--border); padding: 20px 40px; max-width: 1600px; margin: 0 auto; display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); }}
@@ -208,12 +236,12 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
 <div class="header">
   <div class="header-inner">
     <div>
-      <div class="site-name">AI Art Daily · Top Voted</div>
-      <h1 class="header-title"><em>{headline}</em></h1>
+      <div class="site-name">AI Art Daily</div>
+      <h1 class="header-title"><em>{theme}</em></h1>
     </div>
     <div class="header-right">
       <div class="header-date">{date_str}</div>
-      <div class="image-count">{len(images)} images · <a href="https://civitai.com" target="_blank" style="color:var(--accent2);text-decoration:none">Civitai</a></div>
+      <div class="image-count">{len(images)} images · <a href="https://unsplash.com?utm_source=aiart&utm_medium=referral" target="_blank" style="color:var(--accent2);text-decoration:none">Unsplash</a></div>
     </div>
   </div>
 </div>
@@ -226,7 +254,7 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
 </div>
 
 <div class="footer">
-  <span>Updated {generated_at} · Top voted AI art via <a href="https://civitai.com" target="_blank">Civitai</a></span>
+  <span>Updated {generated_at} · Photos via <a href="https://unsplash.com?utm_source=aiart&utm_medium=referral" target="_blank">Unsplash</a></span>
   <span><a href="/daily.html">← Daily Brief</a></span>
 </div>
 
@@ -261,9 +289,9 @@ def main(dry_run: bool = False):
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     logger.info("🎨 Building AiArt Daily Gallery — %s", date_str)
 
-    images   = fetch_civitai_images(count=20)
-    headline = groq_headline(date_str, images)
-    html     = build_html(images, headline, date_str, generated_at)
+    theme  = pick_theme(date_str)
+    images = fetch_unsplash_images(theme, count=20)
+    html   = build_html(images, theme, date_str, generated_at)
 
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     logger.info("✅ Saved to %s (%d images)", OUTPUT_PATH, len(images))
