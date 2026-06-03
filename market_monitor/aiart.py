@@ -168,21 +168,14 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
 </div>
 
 <script>
-const IMAGES = {images_json};
+// Initial images baked in — shown instantly on page load
+const INITIAL = {images_json};
 
-function shuffle(arr) {{
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {{
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }}
-  return a;
-}}
-
-function showBatch() {{
+function renderCards(images) {{
   const grid = document.getElementById('grid');
+  const countLabel = document.getElementById('count-label');
   grid.innerHTML = '';
-  shuffle(IMAGES).slice(0, 20).forEach(img => {{
+  images.forEach(img => {{
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
@@ -194,9 +187,48 @@ function showBatch() {{
       </div>`;
     grid.appendChild(card);
   }});
+  countLabel.innerHTML = images.length + ' images · <a href="https://civitai.com" target="_blank" style="color:var(--accent2);text-decoration:none">Civitai</a>';
 }}
 
-showBatch();
+async function loadBatch() {{
+  const btn = document.querySelector('.regen-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+
+  // Random page for genuine variety — no auth header needed for public images
+  const page = Math.floor(Math.random() * 10) + 1;
+  const url = `https://civitai.com/api/v1/images?limit=20&sort=Most+Reactions&period=Day&nsfw=None&type=image&page=${{page}}`;
+
+  try {{
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const items = (await r.json()).items || [];
+    const images = items.filter(i => i.url).slice(0, 20).map(i => {{
+      const meta = i.meta || {{}};
+      const stats = i.stats || {{}};
+      return {{
+        url: i.url.replace('/original=true/', '/width=1200/'),
+        prompt: (meta.prompt || '').slice(0, 160),
+        hearts: stats.heartCount || 0,
+        likes: stats.likeCount || 0,
+        username: i.username || '',
+        width: i.width || 800,
+        height: i.height || 600,
+      }};
+    }});
+    if (images.length) renderCards(images);
+    else throw new Error('No images returned');
+  }} catch(e) {{
+    // Fall back to initial set on error
+    renderCards(INITIAL);
+  }}
+
+  btn.disabled = false;
+  btn.textContent = '↻ Load New Batch';
+}}
+
+// Show baked-in images immediately
+renderCards(INITIAL);
 </script>
 </body>
 </html>"""
