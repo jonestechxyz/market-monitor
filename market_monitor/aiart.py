@@ -60,8 +60,8 @@ def fetch_civitai(count: int = 20) -> list[dict]:
                 src = img.get("url", "")
                 if not src:
                     continue
-                if "/width=" not in src:
-                    src = re.sub(r"(https://image\.civitai\.com/[^/]+/)", r"\1width=800/", src)
+                # use original URL — CDN width mangling causes 404s
+                src = src.replace("/original=true/", "/width=1200/")
                 meta   = img.get("meta") or {}
                 stats  = img.get("stats") or {}
                 results.append({
@@ -225,7 +225,7 @@ async function loadBatch() {{
 
     valid.forEach(img => {{
       let src = img.url;
-      if (!/\/width=/.test(src)) src = src.replace(/(https:\/\/image\.civitai\.com\/[^/]+\/)/, '$1width=800/');
+      src = src.replace('/original=true/', '/width=1200/');
       const meta  = img.meta || {{}};
       const stats = img.stats || {{}};
       const prompt = (meta.prompt || '').slice(0, 160);
