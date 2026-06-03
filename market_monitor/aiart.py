@@ -207,9 +207,9 @@ async function loadBatch() {{
   btn.disabled = true;
   btn.textContent = 'Loading…';
 
-  // Random page for genuine variety — no auth header needed for public images
-  const page = Math.floor(Math.random() * 10) + 1;
-  const url = `https://civitai.com/api/v1/images?limit=20&sort=Most+Reactions&period=Day&nsfw=None&type=image&page=${{page}}`;
+  // AllTime pool = millions of images, random page = genuinely different every time
+  const page = Math.floor(Math.random() * 500) + 1;
+  const url = `https://civitai.com/api/v1/images?limit=20&sort=Most+Reactions&period=AllTime&nsfw=None&type=image&page=${{page}}`;
 
   try {{
     const r = await fetch(url);
