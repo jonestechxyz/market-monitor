@@ -155,16 +155,26 @@ def generate_image_b64(scene_prompt: str, width: int = 800, height: int = 512) -
     try:
         import base64, io
         client = InferenceClient(token=HF_TOKEN)
-        image = client.text_to_image(
-            full_prompt,
-            model=HF_IMAGE_MODEL,
-            width=width,
-            height=height,
-        )
-        buf = io.BytesIO()
-        image.save(buf, format="JPEG", quality=85)
-        b64 = base64.b64encode(buf.getvalue()).decode()
-        return f"data:image/jpeg;base64,{b64}"
+        for attempt in range(3):
+            try:
+                image = client.text_to_image(
+                    full_prompt,
+                    model=HF_IMAGE_MODEL,
+                    width=width,
+                    height=height,
+                )
+                buf = io.BytesIO()
+                image.save(buf, format="JPEG", quality=85)
+                b64 = base64.b64encode(buf.getvalue()).decode()
+                return f"data:image/jpeg;base64,{b64}"
+            except Exception as e:
+                msg = str(e)
+                if "429" in msg and attempt < 2:
+                    wait = 30 * (attempt + 1)
+                    logger.warning("HF rate limited, waiting %ds (attempt %d)...", wait, attempt + 1)
+                    time.sleep(wait)
+                else:
+                    raise
     except Exception as e:
         logger.error("HF image error: %s", e)
     return ""
