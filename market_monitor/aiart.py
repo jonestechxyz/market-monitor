@@ -184,8 +184,8 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
 </div>
 
 <div class="gallery-wrap">
-  <div id="status" style="display:none"></div>
-  <div class="masonry" id="grid">{cards}</div>
+  <div id="status">Loading today's top AI art…</div>
+  <div class="masonry" id="grid"></div>
   <div class="regen-wrap">
     <button class="regen-btn" id="regen" onclick="loadBatch()">↻ Load New Batch</button>
   </div>
@@ -200,7 +200,7 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
 const TOKEN = "{token_js}";
 const PERIODS = ['Day','Week','Month'];
 
-async function loadBatch() {{
+async function loadBatch(isRefresh = true) {{
   const grid = document.getElementById('grid');
   const btn  = document.getElementById('regen');
   const status = document.getElementById('status');
@@ -251,6 +251,8 @@ async function loadBatch() {{
   btn.disabled = false;
   btn.textContent = '↻ Load New Batch';
 }}
+
+loadBatch(false);
 </script>
 </body>
 </html>"""
@@ -264,18 +266,19 @@ def ftp_upload(local_path: Path, remote_filename: str = "AiArt.html"):
     if not all([host, user, pwd]):
         logger.warning("FTP credentials not set — skipping upload")
         return False
-    try:
-        with ftplib.FTP_TLS(host, timeout=30) as ftp:
-            ftp.login(user, pwd)
-            ftp.prot_p()
-            ftp.cwd(path)
-            with open(local_path, "rb") as f:
-                ftp.storbinary(f"STOR {remote_filename}", f)
-        logger.info("✅ Uploaded to https://jonestech.xyz/%s", remote_filename)
-        return True
-    except Exception as e:
-        logger.error("FTP upload failed: %s", e)
-        return False
+    for attempt in range(3):
+        try:
+            with ftplib.FTP_TLS(host, timeout=30) as ftp:
+                ftp.login(user, pwd)
+                ftp.cwd(path)
+                with open(local_path, "rb") as f:
+                    ftp.storbinary(f"STOR {remote_filename}", f)
+            logger.info("✅ Uploaded to https://jonestech.xyz/%s", remote_filename)
+            return True
+        except Exception as e:
+            logger.warning("FTP attempt %d failed: %s", attempt + 1, e)
+    logger.error("All FTP attempts failed")
+    return False
 
 
 def main(dry_run: bool = False):
