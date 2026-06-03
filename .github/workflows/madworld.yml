@@ -1,0 +1,38 @@
+name: MAD World Daily Satire
+
+on:
+  schedule:
+    # 09:00 UTC daily — fresh absurdity every morning
+    - cron: "0 9 * * *"
+  workflow_dispatch:  # allow manual runs from the Actions tab
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install openai requests
+
+      - name: Build and upload MadWorld
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          HF_TOKEN:     ${{ secrets.HF_TOKEN }}
+          FTP_HOST:     ${{ secrets.FTP_HOST }}
+          FTP_USER:     ${{ secrets.FTP_USER }}
+          FTP_PASS:     ${{ secrets.FTP_PASS }}
+          FTP_PATH:     ${{ secrets.FTP_PATH }}
+          OUTPUT_PATH:  /tmp/MadWorld.html
+        run: |
+          cd market_monitor
+          python3 madworld.py
