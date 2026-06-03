@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
 PUSHOVER_USER  = "uwb6u3d6hqvcynmthjbwa1g6wyxhzo"
 PUSHOVER_TOKEN = "afgjsjzi2gx7uitk9ty6275mq9ddd4"
-OUTPUT_PATH    = Path(os.getenv("OUTPUT_PATH", "/Users/jasonjones/Side hustler1/public/daily.html"))
+OUTPUT_PATH    = Path(os.getenv("OUTPUT_PATH", "/tmp/daily.html"))
 RSS_BASE       = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
 
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "")
