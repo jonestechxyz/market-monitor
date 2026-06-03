@@ -1,10 +1,9 @@
 """
-AiArt Daily Gallery — top voted AI art from Civitai (authenticated).
+AiArt Daily Gallery — top voted AI art from Civitai.
 
-- Fetches top 20 most-reacted images of the day from Civitai
-- Groq writes a daily headline
-- Dark masonry-grid gallery, prompt + reactions on hover
-- Load New Batch button fetches a fresh random set client-side
+- Server-side: fetches 30 images from Civitai with API token
+- Client-side: shuffles 20 from the 30 on load + "Load New Batch" reshuffles
+  (no client-side API calls — avoids CORS/auth issues)
 - FTP uploads to jonestech.xyz/AiArt.html
 
 Usage:
@@ -14,6 +13,7 @@ Usage:
 
 import argparse
 import ftplib
+import json
 import logging
 import os
 import re
@@ -38,17 +38,13 @@ CIVITAI_API_TOKEN = os.getenv("CIVITAI_API_TOKEN", "")
 OUTPUT_PATH       = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
 
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
-
 FALLBACKS = ["Visions of the Machine", "Dreams in Pixels", "The Synthetic Eye",
              "Worlds Made of Light", "Neural Reverie", "The Imagined Real"]
 
 
-def fetch_civitai(count: int = 20) -> list[dict]:
-    headers = {
-        "Authorization": f"Bearer {CIVITAI_API_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    url = f"https://civitai.com/api/v1/images?limit={count+10}&sort=Most+Reactions&period=Day&nsfw=None&type=image"
+def fetch_civitai(count: int = 30) -> list[dict]:
+    headers = {"Authorization": f"Bearer {CIVITAI_API_TOKEN}", "Content-Type": "application/json"}
+    url = f"https://civitai.com/api/v1/images?limit={count}&sort=Most+Reactions&period=Day&nsfw=None&type=image"
     for attempt in range(3):
         try:
             r = requests.get(url, headers=headers, timeout=20)
@@ -60,21 +56,18 @@ def fetch_civitai(count: int = 20) -> list[dict]:
                 src = img.get("url", "")
                 if not src:
                     continue
-                # use original URL — CDN width mangling causes 404s
                 src = src.replace("/original=true/", "/width=1200/")
                 meta   = img.get("meta") or {}
                 stats  = img.get("stats") or {}
                 results.append({
                     "url":      src,
-                    "prompt":   (meta.get("prompt") or "")[:200],
+                    "prompt":   (meta.get("prompt") or "")[:160],
                     "hearts":   stats.get("heartCount", 0),
                     "likes":    stats.get("likeCount", 0),
                     "username": img.get("username", ""),
                     "width":    img.get("width", 800),
                     "height":   img.get("height", 600),
                 })
-                if len(results) >= count:
-                    break
             logger.info("Civitai: %d images", len(results))
             return results
         except Exception as e:
@@ -92,7 +85,7 @@ def groq_headline(date_str: str, images: list[dict]) -> str:
             model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": "Return only a headline — 3 to 5 words, poetic, no quotes, no punctuation at end."},
-                {"role": "user",   "content": f"Today is {date_str}. Magazine headline for a gallery of today's top voted AI art. Context:\n{ctx}"}
+                {"role": "user",   "content": f"Today is {date_str}. Magazine headline for today's top voted AI art gallery.\n{ctx}"}
             ],
             temperature=0.85, max_tokens=20,
         )
@@ -103,27 +96,8 @@ def groq_headline(date_str: str, images: list[dict]) -> str:
 
 
 def build_html(images: list[dict], headline: str, date_str: str, generated_at: str) -> str:
-    def safe(s):
-        return s.replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
-
-    cards = ""
-    for img in images:
-        prompt   = safe(img["prompt"][:160]) + ("…" if len(img["prompt"]) > 160 else "")
-        hearts   = img["hearts"]
-        likes    = img["likes"]
-        reactions = f'<div class="reactions">❤️ {hearts:,} &nbsp;👍 {likes:,}</div>' if hearts or likes else ""
-        by       = f'<div class="by">by {safe(img["username"])}</div>' if img["username"] else ""
-        cards += f"""
-    <div class="card">
-      <img src="{img['url']}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').remove()">
-      <div class="overlay">
-        {reactions}
-        {by}
-        {"<p class='prompt'>" + prompt + "</p>" if prompt else ""}
-      </div>
-    </div>"""
-
-    token_js = CIVITAI_API_TOKEN  # embedded for client-side refresh
+    images_json = json.dumps(images, ensure_ascii=False)
+    count = len(images)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -145,7 +119,6 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
   .header-date {{ font-size:13px; color:var(--dim); font-weight:500; margin-bottom:6px; }}
   .image-count {{ font-size:11px; color:var(--dim); }}
   .gallery-wrap {{ max-width:1600px; margin:0 auto; padding:36px 24px 60px; }}
-  #status {{ text-align:center; font-size:13px; color:var(--dim); padding:20px 0 28px; font-style:italic; }}
   .masonry {{ columns:4 280px; column-gap:14px; }}
   .card {{ position:relative; break-inside:avoid; margin-bottom:14px; border-radius:10px; overflow:hidden; background:var(--surface); cursor:pointer; transition:transform .2s,box-shadow .2s; }}
   .card:hover {{ transform:translateY(-3px); box-shadow:0 16px 40px rgba(0,0,0,.7); z-index:2; }}
@@ -159,7 +132,6 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
   .regen-wrap {{ text-align:center; padding:28px 0 0; }}
   .regen-btn {{ background:#1a1a1a; color:var(--accent); border:1px solid var(--accent); padding:10px 28px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; letter-spacing:.05em; transition:background .15s; }}
   .regen-btn:hover {{ background:#2a1a3a; }}
-  .regen-btn:disabled {{ opacity:.5; cursor:default; }}
   .footer {{ border-top:1px solid var(--border); padding:20px 40px; max-width:1600px; margin:0 auto; display:flex; justify-content:space-between; font-size:11px; color:var(--dim); }}
   .footer a {{ color:var(--accent2); text-decoration:none; }}
   @media(max-width:600px) {{
@@ -178,16 +150,15 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
     </div>
     <div class="header-right">
       <div class="header-date">{date_str}</div>
-      <div class="image-count" id="count-label">{len(images)} images · <a href="https://civitai.com" target="_blank" style="color:var(--accent2);text-decoration:none">Civitai</a></div>
+      <div class="image-count" id="count-label">{count} images · <a href="https://civitai.com" target="_blank" style="color:var(--accent2);text-decoration:none">Civitai</a></div>
     </div>
   </div>
 </div>
 
 <div class="gallery-wrap">
-  <div id="status">Loading today's top AI art…</div>
   <div class="masonry" id="grid"></div>
   <div class="regen-wrap">
-    <button class="regen-btn" id="regen" onclick="loadBatch()">↻ Load New Batch</button>
+    <button class="regen-btn" onclick="showBatch()">↻ Load New Batch</button>
   </div>
 </div>
 
@@ -197,62 +168,35 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
 </div>
 
 <script>
-const TOKEN = "{token_js}";
-const PERIODS = ['Day','Week','Month'];
+const IMAGES = {images_json};
 
-async function loadBatch(isRefresh = true) {{
-  const grid = document.getElementById('grid');
-  const btn  = document.getElementById('regen');
-  const status = document.getElementById('status');
-  const countLabel = document.getElementById('count-label');
-  const period = PERIODS[Math.floor(Math.random() * PERIODS.length)];
-
-  btn.disabled = true;
-  btn.textContent = 'Loading…';
-  grid.innerHTML = '';
-  status.style.display = 'none';
-
-  try {{
-    const r = await fetch(
-      `https://civitai.com/api/v1/images?limit=30&sort=Most+Reactions&period=${{period}}&nsfw=None&type=image`,
-      {{ headers: {{ Authorization: 'Bearer ' + TOKEN }} }}
-    );
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const items = (await r.json()).items || [];
-    const valid = items.filter(i => i.url).slice(0, 20);
-
-    countLabel.innerHTML = valid.length + ' images · <a href="https://civitai.com" target="_blank" style="color:var(--accent2);text-decoration:none">Civitai</a>';
-
-    valid.forEach(img => {{
-      let src = img.url;
-      src = src.replace('/original=true/', '/width=1200/');
-      const meta  = img.meta || {{}};
-      const stats = img.stats || {{}};
-      const prompt = (meta.prompt || '').slice(0, 160);
-      const hearts = stats.heartCount || 0;
-      const likes  = stats.likeCount  || 0;
-
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `
-        <img src="${{src}}" loading="lazy" width="${{img.width||800}}" height="${{img.height||600}}" onerror="this.closest('.card').remove()">
-        <div class="overlay">
-          ${{(hearts||likes) ? `<div class="reactions">❤️ ${{hearts.toLocaleString()}} &nbsp;👍 ${{likes.toLocaleString()}}</div>` : ''}}
-          ${{img.username ? `<div class="by">by ${{img.username}}</div>` : ''}}
-          ${{prompt ? `<p class="prompt">${{prompt}}${{(meta.prompt||'').length>160?'…':''}}</p>` : ''}}
-        </div>`;
-      grid.appendChild(card);
-    }});
-  }} catch(e) {{
-    status.style.display = 'block';
-    status.textContent = 'Could not load: ' + e.message;
+function shuffle(arr) {{
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {{
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }}
-
-  btn.disabled = false;
-  btn.textContent = '↻ Load New Batch';
+  return a;
 }}
 
-loadBatch(false);
+function showBatch() {{
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  shuffle(IMAGES).slice(0, 20).forEach(img => {{
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <img src="${{img.url}}" loading="lazy" width="${{img.width}}" height="${{img.height}}" onerror="this.closest('.card').remove()">
+      <div class="overlay">
+        ${{(img.hearts||img.likes) ? `<div class="reactions">❤️ ${{img.hearts.toLocaleString()}} &nbsp;👍 ${{img.likes.toLocaleString()}}</div>` : ''}}
+        ${{img.username ? `<div class="by">by ${{img.username}}</div>` : ''}}
+        ${{img.prompt ? `<p class="prompt">${{img.prompt.slice(0,160)}}${{img.prompt.length>160?'…':''}}</p>` : ''}}
+      </div>`;
+    grid.appendChild(card);
+  }});
+}}
+
+showBatch();
 </script>
 </body>
 </html>"""
@@ -286,7 +230,7 @@ def main(dry_run: bool = False):
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     logger.info("🎨 Building AiArt Daily Gallery — %s", date_str)
 
-    images   = fetch_civitai(count=20)
+    images   = fetch_civitai(count=30)
     headline = groq_headline(date_str, images)
     html     = build_html(images, headline, date_str, generated_at)
 
