@@ -207,9 +207,15 @@ async function loadBatch() {{
   btn.disabled = true;
   btn.textContent = 'Loading…';
 
-  // AllTime pool = millions of images, random page = genuinely different every time
-  const page = Math.floor(Math.random() * 500) + 1;
-  const url = `https://civitai.com/api/v1/images?limit=20&sort=Most+Reactions&period=AllTime&nsfw=None&type=image&page=${{page}}`;
+  // Rotate sort/period combos — Civitai ignores page param, but different combos give different images
+  const combos = [
+    ['Most+Reactions','Week'],   ['Most+Reactions','Month'],
+    ['Most+Comments','Week'],    ['Most+Comments','Month'],   ['Most+Comments','AllTime'],
+    ['Newest','AllTime'],        ['Newest','Month'],
+    ['Most+Reactions','Year'],   ['Most+Comments','Year'],    ['Newest','Year'],
+  ];
+  const [sort, period] = combos[Math.floor(Math.random() * combos.length)];
+  const url = `https://civitai.com/api/v1/images?limit=20&sort=${{sort}}&period=${{period}}&nsfw=None&type=image`;
 
   try {{
     const r = await fetch(url);
