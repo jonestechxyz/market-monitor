@@ -141,22 +141,19 @@ const SKIP = new Set(["ai-generated","absurdres","highres","bad_id","bad_pixiv_i
   "bad_twitter_id","commentary","english_commentary","translated","jpeg_artifacts",
   "watermark","signature","artist_name"]);
 
-let currentPage = 1;
-
 async function loadImages(next) {{
   const status = document.getElementById('status');
   const grid   = document.getElementById('grid');
   const btn    = document.getElementById('regen');
   const countLabel = document.getElementById('count-label');
 
-  if (next) currentPage = Math.floor(Math.random() * 8) + 1;
-
   grid.innerHTML = '';
   status.style.display = 'block';
   status.textContent = 'Loading…';
   if (btn) btn.disabled = true;
 
-  const API = 'https://danbooru.donmai.us/posts.json?tags=ai-generated+rating:general+order:score&limit=30&page=' + currentPage;
+  // order:random gives a fresh shuffle every request
+  const API = 'https://danbooru.donmai.us/posts.json?tags=ai-generated+rating:general+order:random&limit=25';
 
   try {{
     const res = await fetch(API);
