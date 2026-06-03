@@ -67,6 +67,7 @@ def fetch_civitai(count: int = 30) -> list[dict]:
                     "username": img.get("username", ""),
                     "width":    img.get("width", 800),
                     "height":   img.get("height", 600),
+                    "id":       img.get("id", ""),
                 })
             logger.info("Civitai: %d images", len(results))
             return results
@@ -124,8 +125,14 @@ def build_html(images: list[dict], headline: str, date_str: str, generated_at: s
   .card:hover {{ transform:translateY(-3px); box-shadow:0 16px 40px rgba(0,0,0,.7); z-index:2; }}
   .card img {{ display:block; width:100%; height:auto; transition:filter .3s; }}
   .card:hover img {{ filter:brightness(.3); }}
-  .overlay {{ position:absolute; inset:0; padding:16px; display:flex; flex-direction:column; justify-content:flex-end; gap:5px; opacity:0; transition:opacity .3s; pointer-events:none; background:linear-gradient(to top,rgba(0,0,0,.88) 0%,transparent 65%); }}
-  .card:hover .overlay {{ opacity:1; }}
+  .overlay {{ position:absolute; inset:0; padding:16px; display:flex; flex-direction:column; justify-content:flex-end; gap:5px; opacity:0; transition:opacity .3s; pointer-events:none; background:linear-gradient(to top,rgba(0,0,0,.88) 0%,transparent 60%); }}
+  .card:hover .overlay {{ opacity:1; pointer-events:auto; }}
+  .overlay-actions {{ display:flex; gap:8px; margin-bottom:4px; }}
+  .overlay-btn {{ font-size:11px; font-weight:600; padding:4px 10px; border-radius:5px; text-decoration:none; cursor:pointer; border:none; }}
+  .btn-img {{ background:rgba(255,255,255,.15); color:#fff; }}
+  .btn-img:hover {{ background:rgba(255,255,255,.25); }}
+  .btn-civitai {{ background:rgba(192,132,252,.2); color:var(--accent); border:1px solid var(--accent); }}
+  .btn-civitai:hover {{ background:rgba(192,132,252,.35); }}
   .reactions {{ font-size:12px; font-weight:600; color:rgba(255,255,255,.9); }}
   .by {{ font-size:11px; color:var(--accent); font-weight:600; }}
   .prompt {{ font-size:11px; line-height:1.5; color:rgba(255,255,255,.8); font-style:italic; word-break:break-word; }}
@@ -176,11 +183,16 @@ function renderCards(images) {{
   const countLabel = document.getElementById('count-label');
   grid.innerHTML = '';
   images.forEach(img => {{
+    const civitaiUrl = img.id ? `https://civitai.com/images/${{img.id}}` : 'https://civitai.com';
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
       <img src="${{img.url}}" loading="lazy" width="${{img.width}}" height="${{img.height}}" onerror="this.closest('.card').remove()">
       <div class="overlay">
+        <div class="overlay-actions">
+          <a class="overlay-btn btn-img" href="${{img.url}}" target="_blank">🔍 Full image</a>
+          <a class="overlay-btn btn-civitai" href="${{civitaiUrl}}" target="_blank">↗ Civitai</a>
+        </div>
         ${{(img.hearts||img.likes) ? `<div class="reactions">❤️ ${{img.hearts.toLocaleString()}} &nbsp;👍 ${{img.likes.toLocaleString()}}</div>` : ''}}
         ${{img.username ? `<div class="by">by ${{img.username}}</div>` : ''}}
         ${{img.prompt ? `<p class="prompt">${{img.prompt.slice(0,160)}}${{img.prompt.length>160?'…':''}}</p>` : ''}}
@@ -214,6 +226,7 @@ async function loadBatch() {{
         username: i.username || '',
         width: i.width || 800,
         height: i.height || 600,
+        id: i.id || '',
       }};
     }});
     if (images.length) renderCards(images);
