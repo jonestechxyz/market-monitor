@@ -22,7 +22,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install openai requests
+        run: pip install openai requests huggingface_hub Pillow
 
       - name: Build and upload MadWorld
         env:

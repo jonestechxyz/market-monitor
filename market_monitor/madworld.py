@@ -25,6 +25,7 @@ from pathlib import Path
 
 import requests
 from openai import OpenAI
+from huggingface_hub import InferenceClient
 
 # ── load .env ──────────────────────────────────────────────────────────────────
 _env = Path(__file__).parent / ".env"
@@ -42,8 +43,7 @@ HF_TOKEN     = os.getenv("HF_TOKEN", "")
 OUTPUT_PATH  = Path(os.getenv("OUTPUT_PATH", "/tmp/MadWorld.html"))
 RSS_BASE     = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
 
-# Hugging Face Inference API — FLUX.1-schnell (free tier, fast)
-HF_IMAGE_API = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
 
 MAD_STYLE = (
     "gap-toothed big-eared grinning red-haired freckled boy mascot, "
@@ -147,43 +147,24 @@ def groq_pick_stories(headlines: list[str]) -> list[dict]:
 
 # ── hugging face image generation ─────────────────────────────────────────────
 def generate_image_b64(scene_prompt: str, width: int = 800, height: int = 512) -> str:
-    """Call HF Inference API, return base64 data URI or empty string on failure."""
+    """Generate image via HF InferenceClient, return base64 data URI or empty string."""
     if not HF_TOKEN:
         logger.warning("HF_TOKEN not set — skipping image generation")
         return ""
     full_prompt = f"{MAD_STYLE}, {scene_prompt}"
     try:
-        resp = requests.post(
-            HF_IMAGE_API,
-            headers={"Authorization": f"Bearer {HF_TOKEN}"},
-            json={
-                "inputs": full_prompt,
-                "parameters": {"width": width, "height": height, "num_inference_steps": 4},
-            },
-            timeout=60,
+        import base64, io
+        client = InferenceClient(token=HF_TOKEN)
+        image = client.text_to_image(
+            full_prompt,
+            model=HF_IMAGE_MODEL,
+            width=width,
+            height=height,
         )
-        if resp.status_code == 200:
-            import base64
-            b64 = base64.b64encode(resp.content).decode()
-            return f"data:image/jpeg;base64,{b64}"
-        elif resp.status_code == 503:
-            # Model loading — retry once after a pause
-            logger.info("HF model loading, waiting 20s...")
-            time.sleep(20)
-            resp = requests.post(
-                HF_IMAGE_API,
-                headers={"Authorization": f"Bearer {HF_TOKEN}"},
-                json={
-                    "inputs": full_prompt,
-                    "parameters": {"width": width, "height": height, "num_inference_steps": 4},
-                },
-                timeout=60,
-            )
-            if resp.status_code == 200:
-                import base64
-                b64 = base64.b64encode(resp.content).decode()
-                return f"data:image/jpeg;base64,{b64}"
-        logger.warning("HF image failed: %s %s", resp.status_code, resp.text[:200])
+        buf = io.BytesIO()
+        image.save(buf, format="JPEG", quality=85)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        return f"data:image/jpeg;base64,{b64}"
     except Exception as e:
         logger.error("HF image error: %s", e)
     return ""
@@ -582,7 +563,7 @@ def ftp_upload(local_path: Path, remote_filename: str = "MadWorld.html"):
         logger.warning("FTP credentials not set — skipping upload")
         return False
     try:
-        with ftplib.FTP_TLS(host, timeout=30) as ftp:
+        with ftplib.FTP_TLS(host, timeout=60) as ftp:
             ftp.login(user, pwd)
             ftp.prot_p()
             ftp.cwd(path)
@@ -591,8 +572,18 @@ def ftp_upload(local_path: Path, remote_filename: str = "MadWorld.html"):
         logger.info("✅ Uploaded to https://jonestech.xyz/%s", remote_filename)
         return True
     except Exception as e:
-        logger.error("FTP upload failed: %s", e)
-        return False
+        logger.warning("FTP_TLS failed (%s), trying plain FTP...", e)
+        try:
+            with ftplib.FTP(host, timeout=60) as ftp:
+                ftp.login(user, pwd)
+                ftp.cwd(path)
+                with open(local_path, "rb") as f:
+                    ftp.storbinary(f"STOR {remote_filename}", f)
+            logger.info("✅ Uploaded via plain FTP to https://jonestech.xyz/%s", remote_filename)
+            return True
+        except Exception as e2:
+            logger.error("FTP upload failed: %s", e2)
+            return False
 
 # ── main ───────────────────────────────────────────────────────────────────────
 def main(dry_run: bool = False):
