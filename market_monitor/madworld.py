@@ -46,8 +46,8 @@ RSS_BASE     = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid
 HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
 
 MAD_STYLE = (
-    "grinning cartoon boy mascot with wild golden blonde hair, orange-tinted skin, tiny hands, "
-    "red necktie, blue suit, exaggerated smug expression, chubby cheeks, thumbs up, "
+    "gap-toothed big-eared freckle-faced goofy-grinning boy mascot, "
+    "wild swooping golden blonde combover hair, slightly orange-tinted chubby cheeks, "
     "MAD Magazine cover art style, vintage 1960s American humor magazine illustration, "
     "bold flat colors, comic book halftone dots, exaggerated caricature, satirical cartoon"
 )
