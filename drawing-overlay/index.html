@@ -274,8 +274,8 @@ function detectEdges(imgEl, threshold) {
     grey[i] = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
   }
 
-  // Sobel
-  const out = new Uint8ClampedArray(w * h * 4);
+  // Sobel — store only alpha (edge strength); RGB left as 0 for line coloring at render time
+  const out = new Uint8ClampedArray(w * h * 4); // all zeros = transparent
   for (let y = 1; y < h-1; y++) {
     for (let x = 1; x < w-1; x++) {
       const idx = y*w + x;
@@ -287,12 +287,8 @@ function detectEdges(imgEl, threshold) {
         -grey[idx-w-1] - 2*grey[idx-w] - grey[idx-w+1]
         +grey[idx+w-1] + 2*grey[idx+w] + grey[idx+w+1];
       const mag = Math.sqrt(gx*gx + gy*gy);
-      const isEdge = mag > threshold ? 255 : 0;
-      const o = idx * 4;
-      out[o]   = isEdge;
-      out[o+1] = isEdge;
-      out[o+2] = isEdge;
-      out[o+3] = isEdge; // alpha = edge magnitude
+      // Store edge strength in alpha only; RGB stays 0 (colored at render time)
+      out[idx * 4 + 3] = mag > threshold ? 255 : 0;
     }
   }
 
@@ -308,21 +304,24 @@ function render() {
   const { imageData, w, h } = state.edgeData;
   const { x, y, scale, rotation } = state.transform;
 
-  // build a colored version of edges
-  const colored = new ImageData(new Uint8ClampedArray(imageData.data), w, h);
+  // Color the edge mask: RGB = line color, alpha = edge strength × opacity
   const [r, g, b] = state.lineColor;
-  for (let i = 0; i < colored.data.length; i += 4) {
-    const a = colored.data[i]; // was grayscale edge value
-    colored.data[i]   = r;
-    colored.data[i+1] = g;
-    colored.data[i+2] = b;
-    colored.data[i+3] = Math.round(a * state.opacity);
+  const raw = imageData.data;
+  const colored = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < colored.length; i += 4) {
+    const edgeAlpha = raw[i + 3]; // only the alpha channel holds edge data
+    if (edgeAlpha > 0) {
+      colored[i]     = r;
+      colored[i + 1] = g;
+      colored[i + 2] = b;
+      colored[i + 3] = Math.round(edgeAlpha * state.opacity);
+    }
+    // else stays 0,0,0,0 — fully transparent, camera shows through
   }
 
-  // draw to offscreen
   const off = document.createElement('canvas');
   off.width = w; off.height = h;
-  off.getContext('2d').putImageData(colored, 0, 0);
+  off.getContext('2d').putImageData(new ImageData(colored, w, h), 0, 0);
 
   // apply transform
   ctx.save();
