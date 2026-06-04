@@ -14,17 +14,18 @@
       overflow: hidden;
       background: #000;
       touch-action: none;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
+    /* ── camera ── */
     #camera {
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       width: 100%; height: 100%;
       object-fit: cover;
       z-index: 1;
     }
 
-    /* The image overlay — transformed via JS */
+    /* ── image overlay ── */
     #overlay-img {
       position: fixed;
       z-index: 2;
@@ -33,25 +34,25 @@
       display: none;
     }
 
+    /* ── gesture capture layer ── */
     #gesture-layer {
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       z-index: 3;
       touch-action: none;
     }
 
+    /* ── bottom controls bar ── */
     #controls {
       position: fixed;
-      bottom: 28px;
-      left: 50%;
+      bottom: 28px; left: 50%;
       transform: translateX(-50%);
       z-index: 10;
       display: flex;
       align-items: center;
       gap: 18px;
       background: rgba(0,0,0,0.55);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
       border: 1px solid rgba(255,255,255,0.15);
       border-radius: 40px;
       padding: 12px 24px;
@@ -64,33 +65,27 @@
       width: 48px; height: 48px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer;
-      font-size: 22px;
-      color: #fff;
+      font-size: 22px; color: #fff;
       -webkit-tap-highlight-color: transparent;
-      transition: background 0.15s;
+      flex-shrink: 0;
     }
     .ctrl-btn:active { background: rgba(255,255,255,0.35); }
 
     .slider-group {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 3px;
     }
     .slider-label {
       color: rgba(255,255,255,0.7);
-      font-size: 10px;
-      letter-spacing: 0.05em;
-      font-family: -apple-system, sans-serif;
+      font-size: 10px; letter-spacing: .05em;
       text-transform: uppercase;
     }
     input[type=range] {
       -webkit-appearance: none;
-      width: 120px; height: 4px;
+      width: 130px; height: 4px;
       border-radius: 2px;
       background: rgba(255,255,255,0.3);
-      outline: none;
-      cursor: pointer;
+      outline: none; cursor: pointer;
     }
     input[type=range]::-webkit-slider-thumb {
       -webkit-appearance: none;
@@ -100,30 +95,191 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.4);
     }
 
-    #welcome {
-      position: fixed;
-      inset: 0;
-      z-index: 15;
-      background: rgba(0,0,0,0.75);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 20px;
-      color: #fff;
-      font-family: -apple-system, sans-serif;
-      padding: 32px;
+    /* ── gallery sheet ── */
+    #gallery {
+      position: fixed; inset: 0;
+      z-index: 20;
+      background: #111;
+      display: flex; flex-direction: column;
+      transform: translateY(100%);
+      transition: transform .35s cubic-bezier(.4,0,.2,1);
+    }
+    #gallery.open { transform: translateY(0); }
+
+    #gallery-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+    }
+    #gallery-back {
+      background: rgba(255,255,255,0.1);
+      border: none; border-radius: 50%;
+      width: 38px; height: 38px;
+      color: #fff; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #gallery-title {
+      color: #fff; font-size: 17px; font-weight: 600;
+      flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #gallery-close {
+      background: rgba(255,255,255,0.1);
+      border: none; border-radius: 50%;
+      width: 38px; height: 38px;
+      color: #fff; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* search row */
+    #search-row {
+      display: flex; gap: 10px;
+      padding: 12px 16px;
+      flex-shrink: 0;
+    }
+    #search-input {
+      flex: 1;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px;
+      color: #fff; font-size: 16px;
+      padding: 10px 14px;
+      outline: none;
+    }
+    #search-input::placeholder { color: rgba(255,255,255,0.35); }
+    #search-btn {
+      background: #fff; color: #000;
+      border: none; border-radius: 12px;
+      padding: 10px 18px;
+      font-size: 15px; font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      white-space: nowrap;
+    }
+
+    /* grid */
+    #gallery-scroll {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px 16px 40px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .thumb-card {
+      border-radius: 10px;
+      overflow: hidden;
+      background: #222;
+      cursor: pointer;
+      position: relative;
+      aspect-ratio: 3/4;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .thumb-card img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .thumb-card .label {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,.8));
+      color: #fff; font-size: 11px;
+      padding: 18px 6px 6px;
+      line-height: 1.3;
+    }
+    .thumb-card:active { opacity: 0.7; }
+
+    /* page grid items — square */
+    .page-card {
+      border-radius: 10px;
+      overflow: hidden;
+      background: #222;
+      cursor: pointer;
+      aspect-ratio: 3/4;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .page-card img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .page-card:active { opacity: 0.7; }
+    .page-num {
       text-align: center;
+      color: rgba(255,255,255,0.5);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    /* chapter list */
+    .chapter-item {
+      display: flex; align-items: center;
+      padding: 14px 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      color: #fff; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      gap: 10px;
+    }
+    .chapter-item:active { opacity: 0.6; }
+    .chapter-num { font-weight: 600; font-size: 15px; flex-shrink: 0; }
+    .chapter-title { font-size: 13px; color: rgba(255,255,255,0.55); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chapter-arrow { color: rgba(255,255,255,0.3); font-size: 18px; }
+
+    /* spinner */
+    .spinner {
+      display: flex; align-items: center; justify-content: center;
+      padding: 60px; color: rgba(255,255,255,0.4);
+      font-size: 14px;
+    }
+
+    /* popular chips */
+    #popular-row {
+      display: flex; gap: 8px;
+      padding: 0 16px 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      flex-shrink: 0;
+    }
+    #popular-row::-webkit-scrollbar { display: none; }
+    .chip {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px;
+      color: #fff; font-size: 13px;
+      padding: 6px 14px;
+      white-space: nowrap;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      flex-shrink: 0;
+    }
+    .chip:active { background: rgba(255,255,255,0.25); }
+
+    /* welcome */
+    #welcome {
+      position: fixed; inset: 0; z-index: 30;
+      background: rgba(0,0,0,0.85);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px; color: #fff;
+      padding: 32px; text-align: center;
     }
     #welcome h1 { font-size: 28px; font-weight: 700; }
-    #welcome p  { font-size: 15px; color: rgba(255,255,255,0.75); max-width: 300px; line-height: 1.5; }
-    #start-btn {
+    #welcome p  { font-size: 15px; color: rgba(255,255,255,0.7); max-width: 300px; line-height: 1.5; }
+    #start-btn  {
       background: #fff; color: #000;
       border: none; border-radius: 30px;
       padding: 14px 36px;
       font-size: 17px; font-weight: 600;
       cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
     }
 
     #file-input { display: none; }
@@ -135,36 +291,98 @@
 <img id="overlay-img" />
 <div id="gesture-layer"></div>
 
+<!-- bottom bar -->
 <div id="controls">
-  <label for="file-input" class="ctrl-btn" title="Load image">🖼️</label>
+  <!-- manga gallery -->
+  <div class="ctrl-btn" id="manga-btn" title="Manga gallery">📚</div>
+
+  <!-- local file fallback -->
+  <label for="file-input" class="ctrl-btn" title="Load from device">🖼️</label>
   <input type="file" id="file-input" accept="image/*" />
 
+  <!-- opacity -->
   <div class="slider-group">
     <span class="slider-label">Opacity</span>
     <input type="range" id="opacity-slider" min="5" max="100" value="50" />
   </div>
 
+  <!-- reset -->
   <div class="ctrl-btn" id="reset-btn" title="Reset">⟳</div>
+</div>
+
+<!-- gallery sheet -->
+<div id="gallery">
+  <div id="gallery-header">
+    <button id="gallery-back">‹</button>
+    <div id="gallery-title">Manga</div>
+    <button id="gallery-close">✕</button>
+  </div>
+
+  <div id="search-row">
+    <input type="text" id="search-input" placeholder="Search manga…" />
+    <button id="search-btn">Search</button>
+  </div>
+
+  <div id="popular-row">
+    <div class="chip" data-q="Dragon Ball">Dragon Ball</div>
+    <div class="chip" data-q="One Piece">One Piece</div>
+    <div class="chip" data-q="Naruto">Naruto</div>
+    <div class="chip" data-q="My Hero Academia">My Hero Academia</div>
+    <div class="chip" data-q="Demon Slayer">Demon Slayer</div>
+    <div class="chip" data-q="Attack on Titan">Attack on Titan</div>
+    <div class="chip" data-q="Sailor Moon">Sailor Moon</div>
+    <div class="chip" data-q="Doraemon">Doraemon</div>
+  </div>
+
+  <div id="gallery-scroll">
+    <div class="spinner">Search for manga above ☝️</div>
+  </div>
 </div>
 
 <div id="welcome">
   <h1>✏️ Trace Helper</h1>
-  <p>Load a picture, place the tablet over your paper, and trace what you see.</p>
+  <p>Pick a manga page and trace it on paper while looking at the screen.</p>
   <button id="start-btn">Get Started</button>
 </div>
 
 <script>
-const video        = document.getElementById('camera');
-const overlayImg   = document.getElementById('overlay-img');
-const gestureLayer = document.getElementById('gesture-layer');
-const opacitySlider= document.getElementById('opacity-slider');
-const fileInput    = document.getElementById('file-input');
-const resetBtn     = document.getElementById('reset-btn');
-const welcome      = document.getElementById('welcome');
-const startBtn     = document.getElementById('start-btn');
+// ─────────────────────────────────────────────────────────────
+// DOM refs
+// ─────────────────────────────────────────────────────────────
+const video         = document.getElementById('camera');
+const overlayImg    = document.getElementById('overlay-img');
+const gestureLayer  = document.getElementById('gesture-layer');
+const opacitySlider = document.getElementById('opacity-slider');
+const fileInput     = document.getElementById('file-input');
+const resetBtn      = document.getElementById('reset-btn');
+const mangaBtn      = document.getElementById('manga-btn');
+const gallery       = document.getElementById('gallery');
+const galleryScroll = document.getElementById('gallery-scroll');
+const galleryTitle  = document.getElementById('gallery-title');
+const galleryBack   = document.getElementById('gallery-back');
+const galleryClose  = document.getElementById('gallery-close');
+const searchInput   = document.getElementById('search-input');
+const searchBtn     = document.getElementById('search-btn');
+const welcome       = document.getElementById('welcome');
+const startBtn      = document.getElementById('start-btn');
 
-// transform state
-let tr = { x: 0, y: 0, scale: 1, rotation: 0 };
+// ─────────────────────────────────────────────────────────────
+// Camera
+// ─────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+  } catch(e) { console.warn('Camera error', e); }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Image overlay + gestures
+// ─────────────────────────────────────────────────────────────
+let tr = { x:0, y:0, scale:1, rotation:0 };
 let imgW = 0, imgH = 0;
 
 function applyTransform() {
@@ -173,106 +391,283 @@ function applyTransform() {
     `rotate(${tr.rotation}rad) scale(${tr.scale})`;
 }
 
-function resetTransform() {
-  const scaleX = window.innerWidth  / imgW;
-  const scaleY = window.innerHeight / imgH;
-  tr = { x: 0, y: 0, scale: Math.min(scaleX, scaleY) * 0.9, rotation: 0 };
-  overlayImg.style.left = '50%';
-  overlayImg.style.top  = '50%';
-  applyTransform();
-}
-
-// ── camera ──────────────────────────────────────────────────────────────────
-async function startCamera() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false,
-    });
-    video.srcObject = stream;
-  } catch (e) {
-    console.warn('Camera error', e);
-  }
-}
-
-// ── image load ───────────────────────────────────────────────────────────────
-fileInput.addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const url = URL.createObjectURL(file);
+function loadUrl(url) {
   overlayImg.onload = () => {
     imgW = overlayImg.naturalWidth;
     imgH = overlayImg.naturalHeight;
     overlayImg.style.width  = imgW + 'px';
     overlayImg.style.height = imgH + 'px';
     overlayImg.style.display = 'block';
-    resetTransform();
-    URL.revokeObjectURL(url);
+    const s = Math.min(window.innerWidth/imgW, window.innerHeight/imgH) * 0.9;
+    tr = { x:0, y:0, scale:s, rotation:0 };
+    overlayImg.style.left = '50%';
+    overlayImg.style.top  = '50%';
+    applyTransform();
   };
   overlayImg.src = url;
-});
+}
 
-// ── opacity ──────────────────────────────────────────────────────────────────
+function resetTransform() {
+  if (!imgW) return;
+  tr = { x:0, y:0, scale: Math.min(window.innerWidth/imgW, window.innerHeight/imgH)*0.9, rotation:0 };
+  applyTransform();
+}
+
+overlayImg.style.opacity = 0.5;
 opacitySlider.addEventListener('input', () => {
   overlayImg.style.opacity = opacitySlider.value / 100;
 });
-overlayImg.style.opacity = 0.5;
-
-// ── reset ────────────────────────────────────────────────────────────────────
 resetBtn.addEventListener('click', resetTransform);
 
-// ── touch gestures ────────────────────────────────────────────────────────────
-let gestureStart = null;
-let singleStart  = null;
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) loadUrl(URL.createObjectURL(f));
+});
 
-function getTouches(e) { return Array.from(e.touches); }
-function tDist(a, b)   { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
-function tAngle(a, b)  { return Math.atan2(b.clientY - a.clientY, b.clientX - a.clientX); }
-function tMid(a, b)    { return { x: (a.clientX+b.clientX)/2, y: (a.clientY+b.clientY)/2 }; }
+// touch gestures
+let gestureStart = null, singleStart = null;
+const tDist  = (a,b) => Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+const tAngle = (a,b) => Math.atan2(b.clientY-a.clientY, b.clientX-a.clientX);
+const tMid   = (a,b) => ({ x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2 });
 
 gestureLayer.addEventListener('touchstart', e => {
   e.preventDefault();
-  const ts = getTouches(e);
+  const ts = Array.from(e.touches);
   if (ts.length === 1) {
-    singleStart = { cx: ts[0].clientX, cy: ts[0].clientY, tx: tr.x, ty: tr.y };
+    singleStart  = { cx:ts[0].clientX, cy:ts[0].clientY, tx:tr.x, ty:tr.y };
     gestureStart = null;
   } else if (ts.length >= 2) {
-    gestureStart = {
-      dist: tDist(ts[0], ts[1]),
-      angle: tAngle(ts[0], ts[1]),
-      mid: tMid(ts[0], ts[1]),
-      scale: tr.scale, rotation: tr.rotation,
-      tx: tr.x, ty: tr.y,
-    };
-    singleStart = null;
+    gestureStart = { dist:tDist(ts[0],ts[1]), angle:tAngle(ts[0],ts[1]),
+                     mid:tMid(ts[0],ts[1]), scale:tr.scale, rotation:tr.rotation, tx:tr.x, ty:tr.y };
+    singleStart  = null;
   }
-}, { passive: false });
+}, { passive:false });
 
 gestureLayer.addEventListener('touchmove', e => {
   e.preventDefault();
-  const ts = getTouches(e);
+  const ts = Array.from(e.touches);
   if (ts.length === 1 && singleStart) {
     tr.x = singleStart.tx + ts[0].clientX - singleStart.cx;
     tr.y = singleStart.ty + ts[0].clientY - singleStart.cy;
     applyTransform();
   } else if (ts.length >= 2 && gestureStart) {
-    const d   = tDist(ts[0], ts[1]);
-    const a   = tAngle(ts[0], ts[1]);
-    const mid = tMid(ts[0], ts[1]);
-    tr.scale    = gestureStart.scale    * (d / gestureStart.dist);
-    tr.rotation = gestureStart.rotation + (a - gestureStart.angle);
+    const mid = tMid(ts[0],ts[1]);
+    tr.scale    = gestureStart.scale    * (tDist(ts[0],ts[1])  / gestureStart.dist);
+    tr.rotation = gestureStart.rotation + (tAngle(ts[0],ts[1]) - gestureStart.angle);
     tr.x        = gestureStart.tx + mid.x - gestureStart.mid.x;
     tr.y        = gestureStart.ty + mid.y - gestureStart.mid.y;
     applyTransform();
   }
-}, { passive: false });
+}, { passive:false });
 
 gestureLayer.addEventListener('touchend', e => {
   e.preventDefault();
   if (e.touches.length === 0) { singleStart = null; gestureStart = null; }
-}, { passive: false });
+}, { passive:false });
 
-// ── welcome ───────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Gallery state machine
+// view: 'search' | 'chapters' | 'pages'
+// ─────────────────────────────────────────────────────────────
+let navStack = []; // [{view, title, render}]
+
+function openGallery() {
+  navStack = [];
+  galleryBack.style.visibility = 'hidden';
+  galleryTitle.textContent = 'Manga';
+  document.getElementById('search-row').style.display = 'flex';
+  document.getElementById('popular-row').style.display = 'flex';
+  galleryScroll.innerHTML = '<div class="spinner">Search for manga above ☝️</div>';
+  gallery.classList.add('open');
+}
+function closeGallery() {
+  gallery.classList.remove('open');
+}
+
+mangaBtn.addEventListener('click', openGallery);
+galleryClose.addEventListener('click', closeGallery);
+
+galleryBack.addEventListener('click', () => {
+  navStack.pop();
+  if (navStack.length === 0) {
+    galleryBack.style.visibility = 'hidden';
+    galleryTitle.textContent = 'Manga';
+    document.getElementById('search-row').style.display = 'flex';
+    document.getElementById('popular-row').style.display = 'flex';
+  } else {
+    const prev = navStack[navStack.length - 1];
+    galleryTitle.textContent = prev.title;
+    prev.render();
+  }
+});
+
+function pushView(title, renderFn) {
+  navStack.push({ title, render: renderFn });
+  galleryTitle.textContent = title;
+  galleryBack.style.visibility = 'visible';
+  document.getElementById('search-row').style.display = 'none';
+  document.getElementById('popular-row').style.display = 'none';
+  renderFn();
+}
+
+// ─────────────────────────────────────────────────────────────
+// MangaDex API helpers
+// ─────────────────────────────────────────────────────────────
+const MDX = 'https://api.mangadex.org';
+const COVERS = 'https://uploads.mangadex.org/covers';
+
+async function mdxFetch(path) {
+  const r = await fetch(MDX + path);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+function coverUrl(mangaId, filename) {
+  return `${COVERS}/${mangaId}/${filename}.256.jpg`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Search
+// ─────────────────────────────────────────────────────────────
+async function searchManga(query) {
+  galleryScroll.innerHTML = '<div class="spinner">Searching…</div>';
+  try {
+    const enc = encodeURIComponent(query);
+    const data = await mdxFetch(
+      `/manga?title=${enc}&limit=24&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive`
+    );
+    renderMangaGrid(data.data || []);
+  } catch(e) {
+    galleryScroll.innerHTML = `<div class="spinner">Error loading results 😕</div>`;
+  }
+}
+
+function renderMangaGrid(list) {
+  if (!list.length) {
+    galleryScroll.innerHTML = '<div class="spinner">No results found</div>';
+    return;
+  }
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  list.forEach(manga => {
+    const coverRel = manga.relationships.find(r => r.type === 'cover_art');
+    const filename  = coverRel?.attributes?.fileName;
+    const title     = manga.attributes.title.en
+                   || Object.values(manga.attributes.title)[0]
+                   || 'Untitled';
+    const card = document.createElement('div');
+    card.className = 'thumb-card';
+    card.innerHTML = `
+      <img src="${filename ? coverUrl(manga.id, filename) : ''}" loading="lazy" />
+      <div class="label">${title}</div>`;
+    card.addEventListener('click', () => showChapters(manga.id, title));
+    grid.appendChild(card);
+  });
+  galleryScroll.innerHTML = '';
+  galleryScroll.appendChild(grid);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Chapters
+// ─────────────────────────────────────────────────────────────
+async function showChapters(mangaId, mangaTitle) {
+  pushView(mangaTitle, async () => {
+    galleryScroll.innerHTML = '<div class="spinner">Loading chapters…</div>';
+    try {
+      // fetch up to 100 english chapters, ordered by chapter number
+      const data = await mdxFetch(
+        `/manga/${mangaId}/feed?translatedLanguage[]=en&limit=100&order[chapter]=asc&contentRating[]=safe&contentRating[]=suggestive`
+      );
+      const chapters = (data.data || []).filter(c => c.attributes.pages > 0);
+      if (!chapters.length) {
+        galleryScroll.innerHTML = '<div class="spinner">No English chapters found 😕</div>';
+        return;
+      }
+      const list = document.createElement('div');
+      chapters.forEach(ch => {
+        const num   = ch.attributes.chapter || '?';
+        const ctitle = ch.attributes.title || '';
+        const pages  = ch.attributes.pages;
+        const item  = document.createElement('div');
+        item.className = 'chapter-item';
+        item.innerHTML = `
+          <span class="chapter-num">Ch. ${num}</span>
+          <span class="chapter-title">${ctitle || `${pages} pages`}</span>
+          <span class="chapter-arrow">›</span>`;
+        item.addEventListener('click', () => showPages(ch.id, `Ch. ${num}`));
+        list.appendChild(item);
+      });
+      galleryScroll.innerHTML = '';
+      galleryScroll.appendChild(list);
+    } catch(e) {
+      galleryScroll.innerHTML = '<div class="spinner">Error loading chapters 😕</div>';
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Pages
+// ─────────────────────────────────────────────────────────────
+async function showPages(chapterId, chapterLabel) {
+  pushView(chapterLabel, async () => {
+    galleryScroll.innerHTML = '<div class="spinner">Loading pages…</div>';
+    try {
+      const data = await mdxFetch(`/at-home/server/${chapterId}`);
+      const base  = data.baseUrl;
+      const hash  = data.chapter.hash;
+      const pages = data.chapter.dataSaver; // smaller images, faster
+
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      pages.forEach((filename, i) => {
+        const url   = `${base}/data-saver/${hash}/${filename}`;
+        const wrap  = document.createElement('div');
+        wrap.style.textAlign = 'center';
+        const card  = document.createElement('div');
+        card.className = 'page-card';
+        const img   = document.createElement('img');
+        img.src     = url;
+        img.loading = 'lazy';
+        card.appendChild(img);
+        const num   = document.createElement('div');
+        num.className = 'page-num';
+        num.textContent = `Page ${i+1}`;
+        wrap.appendChild(card);
+        wrap.appendChild(num);
+        card.addEventListener('click', () => {
+          loadUrl(url);
+          closeGallery();
+        });
+        grid.appendChild(wrap);
+      });
+      galleryScroll.innerHTML = '';
+      galleryScroll.appendChild(grid);
+    } catch(e) {
+      galleryScroll.innerHTML = '<div class="spinner">Error loading pages 😕</div>';
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Search triggers
+// ─────────────────────────────────────────────────────────────
+function doSearch() {
+  const q = searchInput.value.trim();
+  if (q) searchManga(q);
+}
+searchBtn.addEventListener('click', doSearch);
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    searchInput.value = chip.dataset.q;
+    doSearch();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Welcome
+// ─────────────────────────────────────────────────────────────
 startBtn.addEventListener('click', async () => {
   welcome.style.display = 'none';
   await startCamera();
