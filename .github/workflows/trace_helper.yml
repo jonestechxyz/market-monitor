@@ -32,5 +32,7 @@ jobs:
               ftp.cwd(path)
               with open("drawing-overlay/index.html", "rb") as f:
                   ftp.storbinary("STOR trace.html", f)
+          with open("drawing-overlay/proxy.php", "rb") as f:
+                  ftp.storbinary("STOR trace-proxy.php", f)
           print("✅ Uploaded to https://jonestech.xyz/trace.html")
           EOF

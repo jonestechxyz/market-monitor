@@ -516,22 +516,22 @@ function pushView(title, renderFn) {
 // ─────────────────────────────────────────────────────────────
 // MangaDex API helpers
 // ─────────────────────────────────────────────────────────────
-const MDX = 'https://api.mangadex.org';
-// Proxy all images through corsproxy.io to avoid mixed-content
-// and hotlink-blocking issues
-function proxyImg(url) {
+const MDX    = 'https://api.mangadex.org';
+const PROXY  = 'trace-proxy.php?url=';
+
+function proxyUrl(url) {
   const safe = url.replace(/^http:\/\//, 'https://');
-  return `https://corsproxy.io/?url=${encodeURIComponent(safe)}`;
+  return PROXY + encodeURIComponent(safe);
 }
 
 async function mdxFetch(path) {
-  const r = await fetch(MDX + path);
+  const r = await fetch(proxyUrl(MDX + path));
   if (!r.ok) throw new Error(r.status);
   return r.json();
 }
 
 function coverUrl(mangaId, filename) {
-  return proxyImg(`https://uploads.mangadex.org/covers/${mangaId}/${filename}.256.jpg`);
+  return proxyUrl(`https://uploads.mangadex.org/covers/${mangaId}/${filename}.256.jpg`);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -630,8 +630,8 @@ async function showPages(chapterId, chapterLabel) {
       const grid = document.createElement('div');
       grid.className = 'grid';
       pagesThumb.forEach((thumbFile, i) => {
-        const thumbUrl = proxyImg(`${base}/data-saver/${hash}/${thumbFile}`);
-        const fullUrl  = proxyImg(`${base}/data/${hash}/${pagesFull[i]}`);
+        const thumbUrl = proxyUrl(`${base}/data-saver/${hash}/${thumbFile}`);
+        const fullUrl  = proxyUrl(`${base}/data/${hash}/${pagesFull[i]}`);
         const wrap  = document.createElement('div');
         wrap.style.textAlign = 'center';
         const card  = document.createElement('div');
