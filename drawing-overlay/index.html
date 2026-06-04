@@ -517,7 +517,12 @@ function pushView(title, renderFn) {
 // MangaDex API helpers
 // ─────────────────────────────────────────────────────────────
 const MDX = 'https://api.mangadex.org';
-const COVERS = 'https://uploads.mangadex.org/covers';
+// Proxy all images through corsproxy.io to avoid mixed-content
+// and hotlink-blocking issues
+function proxyImg(url) {
+  const safe = url.replace(/^http:\/\//, 'https://');
+  return `https://corsproxy.io/?url=${encodeURIComponent(safe)}`;
+}
 
 async function mdxFetch(path) {
   const r = await fetch(MDX + path);
@@ -526,7 +531,7 @@ async function mdxFetch(path) {
 }
 
 function coverUrl(mangaId, filename) {
-  return `${COVERS}/${mangaId}/${filename}.256.jpg`;
+  return proxyImg(`https://uploads.mangadex.org/covers/${mangaId}/${filename}.256.jpg`);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -616,20 +621,23 @@ async function showPages(chapterId, chapterLabel) {
     galleryScroll.innerHTML = '<div class="spinner">Loading pages…</div>';
     try {
       const data = await mdxFetch(`/at-home/server/${chapterId}`);
-      const base  = data.baseUrl;
+      // Force https on baseUrl (at-home servers sometimes return http)
+      const base  = data.baseUrl.replace(/^http:\/\//, 'https://');
       const hash  = data.chapter.hash;
-      const pages = data.chapter.dataSaver; // smaller images, faster
+      const pagesFull  = data.chapter.data;      // full quality for overlay
+      const pagesThumb = data.chapter.dataSaver; // smaller for thumbnails
 
       const grid = document.createElement('div');
       grid.className = 'grid';
-      pages.forEach((filename, i) => {
-        const url   = `${base}/data-saver/${hash}/${filename}`;
+      pagesThumb.forEach((thumbFile, i) => {
+        const thumbUrl = proxyImg(`${base}/data-saver/${hash}/${thumbFile}`);
+        const fullUrl  = proxyImg(`${base}/data/${hash}/${pagesFull[i]}`);
         const wrap  = document.createElement('div');
         wrap.style.textAlign = 'center';
         const card  = document.createElement('div');
         card.className = 'page-card';
         const img   = document.createElement('img');
-        img.src     = url;
+        img.src     = thumbUrl;
         img.loading = 'lazy';
         card.appendChild(img);
         const num   = document.createElement('div');
@@ -638,7 +646,7 @@ async function showPages(chapterId, chapterLabel) {
         wrap.appendChild(card);
         wrap.appendChild(num);
         card.addEventListener('click', () => {
-          loadUrl(url);
+          loadUrl(fullUrl);
           closeGallery();
         });
         grid.appendChild(wrap);
