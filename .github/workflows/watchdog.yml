@@ -1,0 +1,50 @@
+name: Watchdog — Catch Missed Scheduled Runs
+
+on:
+  schedule:
+    # Runs at 10:30 UTC — after all daily workflows should have completed
+    # If any didn't run today, this triggers them
+    - cron: "30 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check and re-trigger missed daily workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          echo "🔍 Watchdog check for $TODAY"
+          TRIGGERED=0
+
+          for workflow in market_monitor.yml aiart.yml madworld.yml; do
+            LAST=$(gh run list --workflow=$workflow --limit=1 \
+              --json createdAt,status \
+              --jq '.[0] | "\(.createdAt) \(.status)"' \
+              -R "$REPO" 2>/dev/null || echo "unknown")
+
+            RUN_DATE="${LAST:0:10}"
+
+            if [ "$RUN_DATE" = "$TODAY" ]; then
+              echo "✅ $workflow ran today ($LAST)"
+            else
+              echo "⚠️  $workflow last ran $RUN_DATE — triggering now..."
+              gh workflow run "$workflow" -R "$REPO"
+              TRIGGERED=$((TRIGGERED + 1))
+              sleep 15   # stagger so they don't all start simultaneously
+            fi
+          done
+
+          if [ "$TRIGGERED" -eq 0 ]; then
+            echo "✅ All workflows ran on schedule today."
+          else
+            echo "🔁 Re-triggered $TRIGGERED missed workflow(s)."
+          fi

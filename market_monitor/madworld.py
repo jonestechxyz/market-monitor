@@ -38,9 +38,10 @@ if _env.exists():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-HF_TOKEN     = os.getenv("HF_TOKEN", "")
-OUTPUT_PATH  = Path(os.getenv("OUTPUT_PATH", "/tmp/MadWorld.html"))
+GROQ_API_KEY  = os.getenv("GROQ_API_KEY", "")
+HF_TOKEN      = os.getenv("HF_TOKEN", "")
+SKIP_IMAGES   = os.getenv("SKIP_IMAGES", "").lower() in ("1", "true", "yes")
+OUTPUT_PATH   = Path(os.getenv("OUTPUT_PATH", "/tmp/MadWorld.html"))
 RSS_BASE     = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
 
 HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
@@ -623,13 +624,17 @@ def main(dry_run: bool = False):
     logger.info("Got %d stories from Groq", len(stories))
 
     # 3. Generate images via HF Inference API
-    if HF_TOKEN:
+    if SKIP_IMAGES:
+        logger.info("SKIP_IMAGES=true — skipping image generation (test mode)")
+        for story in stories:
+            story["image_data"] = ""
+    elif HF_TOKEN:
         logger.info("Generating %d images via Hugging Face...", len(stories))
         for i, story in enumerate(stories):
             w, h = (1200, 700) if i == 0 else (600, 400)
             logger.info("  Image %d/%d: %s", i + 1, len(stories), story.get("image_prompt", "")[:60])
             story["image_data"] = generate_image_b64(story.get("image_prompt", "satirical cartoon"), width=w, height=h)
-            time.sleep(1)  # be polite to the free tier
+            time.sleep(2)  # be polite to the free tier
     else:
         logger.warning("HF_TOKEN not set — pages will render without images. Add HF_TOKEN secret.")
         for story in stories:
