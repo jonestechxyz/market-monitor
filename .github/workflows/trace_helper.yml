@@ -1,0 +1,36 @@
+name: Deploy Trace Helper
+
+on:
+  push:
+    paths:
+      - 'drawing-overlay/index.html'
+      - '.github/workflows/trace_helper.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload to jonestech.xyz
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASS }}
+          FTP_PATH: ${{ secrets.FTP_PATH }}
+        run: |
+          python3 - <<'EOF'
+          import ftplib, os
+          host = os.environ["FTP_HOST"]
+          user = os.environ["FTP_USER"]
+          pwd  = os.environ["FTP_PASS"]
+          path = os.environ.get("FTP_PATH", "/public_html/")
+          with ftplib.FTP_TLS(host, timeout=60) as ftp:
+              ftp.login(user, pwd)
+              ftp.prot_p()
+              ftp.cwd(path)
+              with open("drawing-overlay/index.html", "rb") as f:
+                  ftp.storbinary("STOR trace.html", f)
+          print("✅ Uploaded to https://jonestech.xyz/trace.html")
+          EOF
