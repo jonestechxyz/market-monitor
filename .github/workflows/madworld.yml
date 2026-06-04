@@ -33,9 +33,6 @@ jobs:
           FTP_PASS:     ${{ secrets.FTP_PASS }}
           FTP_PATH:     ${{ secrets.FTP_PATH }}
           OUTPUT_PATH:  /tmp/MadWorld.html
-          # Scheduled run = full production (images on)
-          # Manual dispatch = test mode (images off, no quota burned)
-          SKIP_IMAGES: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
         run: |
           cd market_monitor
           python3 madworld.py
