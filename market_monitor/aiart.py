@@ -184,7 +184,9 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
         pd = safe(img["prompt"][:140]) + ("…" if len(img["prompt"]) > 140 else "")
         cards_html += f'''
     <div class="card">
-      <img src="{img['src']}" alt="{ps}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').style.display='none'">
+      <a href="{img['src']}" target="_blank" rel="noopener" title="Open full size">
+        <img src="{img['src']}" alt="{ps}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').style.display='none'">
+      </a>
       <div class="overlay"><p class="prompt-text">{pd}</p></div>
     </div>'''
 
