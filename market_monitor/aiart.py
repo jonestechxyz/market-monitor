@@ -1,23 +1,26 @@
 """
 AiArt Daily Gallery — Life in 2050 edition.
 
-- Groq picks a 2050 futures sub-theme and generates 20 unique prompt variations
-- Images generated via Pollinations.ai / Flux (free, no key needed)
+- Groq picks a 2050 futures sub-theme and generates 12 unique prompt variations
+- Images generated via HuggingFace FLUX.1-schnell, embedded as base64
 - Builds a dark masonry-grid HTML gallery with prompt-on-hover
 - FTP uploads to jonestech.xyz/AiArt.html
 """
 
 import argparse
+import base64
 import ftplib
+import io
 import json
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote
 
 import requests
+from huggingface_hub import InferenceClient
 from openai import OpenAI
 
 _env = Path(__file__).parent / ".env"
@@ -30,8 +33,10 @@ if _env.exists():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-OUTPUT_PATH  = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
+GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
+HF_TOKEN       = os.getenv("HF_TOKEN", "")
+HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
+OUTPUT_PATH    = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
 
 THEME_CANDIDATES = [
@@ -124,17 +129,41 @@ Return ONLY this JSON:
         return seed_theme, [f"{seed_theme} in 2050, photorealistic 8k, variation {i+1}" for i in range(count)]
 
 
-def make_pollinations_url(prompt: str, width: int = 1024, height: int = 768, seed: int = 42) -> str:
-    encoded = quote(prompt)
-    return f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&seed={seed}&nologo=true&enhance=true&model=flux"
+def generate_image_b64(prompt: str, width: int = 896, height: int = 512) -> str:
+    """Generate image via HF FLUX.1-schnell, return base64 data URI."""
+    if not HF_TOKEN:
+        logger.warning("HF_TOKEN not set — skipping image")
+        return ""
+    try:
+        client = InferenceClient(token=HF_TOKEN)
+        for attempt in range(3):
+            try:
+                image = client.text_to_image(prompt, model=HF_IMAGE_MODEL, width=width, height=height)
+                buf = io.BytesIO()
+                image.save(buf, format="JPEG", quality=85)
+                b64 = base64.b64encode(buf.getvalue()).decode()
+                return f"data:image/jpeg;base64,{b64}"
+            except Exception as e:
+                if "429" in str(e) and attempt < 2:
+                    wait = 30 * (attempt + 1)
+                    logger.warning("Rate limited — waiting %ds", wait)
+                    time.sleep(wait)
+                else:
+                    raise
+    except Exception as e:
+        logger.error("HF image error: %s", e)
+    return ""
 
 
 def build_images(prompts: list[str]) -> list[dict]:
     images = []
+    total = len(prompts)
     for i, prompt in enumerate(prompts):
         w, h = IMAGE_SIZES[i % len(IMAGE_SIZES)]
-        url = make_pollinations_url(prompt, width=w, height=h, seed=i * 7 + 42)
-        images.append({"src": url, "prompt": prompt, "width": w, "height": h})
+        logger.info("  Generating %d/%d: %s…", i + 1, total, prompt[:60])
+        src = generate_image_b64(prompt, width=w, height=h)
+        if src:
+            images.append({"src": src, "prompt": prompt, "width": w, "height": h})
     return images
 
 
@@ -201,19 +230,19 @@ body{{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-
     </div>
     <div class="header-right">
       <div class="header-date">{date_str}</div>
-      <div class="image-count">{len(images)} images · Flux · Pollinations.ai</div>
+      <div class="image-count">{len(images)} images · FLUX.1-schnell · HuggingFace</div></div>
     </div>
   </div>
 </div>
 <div class="gallery-wrap">
-  <p class="loading-note">Images generate on load — give them a moment ✨</p>
+  <p class="loading-note">Generated fresh each morning via FLUX · hover for the prompt ✨</p>
   <div class="masonry">
     {cards_html}
     {no_img}
   </div>
 </div>
 <div class="footer">
-  <span>Generated {gen_time} · Images via <a href="https://pollinations.ai" target="_blank">Pollinations.ai</a> · Prompts by Groq</span>
+  <span>Generated {gen_time} · Images via <a href="https://huggingface.co/black-forest-labs/FLUX.1-schnell" target="_blank">FLUX.1-schnell</a> · Prompts by Groq</span>
   <span><a href="/daily.html">← Daily Brief</a></span>
 </div>
 </body>
@@ -245,7 +274,7 @@ def ftp_upload(local_path: Path, remote_filename: str = "AiArt.html"):
 def main(dry_run: bool = False):
     date_str = datetime.now().strftime("%A %-d %B %Y")
     logger.info("Building Life in 2050 Gallery — %s", date_str)
-    theme, prompts = pick_theme_and_prompts(date_str, count=20)
+    theme, prompts = pick_theme_and_prompts(date_str, count=12)
     images = build_images(prompts)
     html = build_html(images, theme, date_str)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
