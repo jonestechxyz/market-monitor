@@ -1,14 +1,10 @@
 """
-AiArt Daily Gallery — top voted AI art from Civitai.
+AiArt Daily Gallery — Life in 2050 edition.
 
-- Server-side: fetches 30 images from Civitai with API token
-- Client-side: shuffles 20 from the 30 on load + "Load New Batch" reshuffles
-  (no client-side API calls — avoids CORS/auth issues)
+- Groq picks a 2050 futures sub-theme and generates 20 unique prompt variations
+- Images generated via Pollinations.ai / Flux (free, no key needed)
+- Builds a dark masonry-grid HTML gallery with prompt-on-hover
 - FTP uploads to jonestech.xyz/AiArt.html
-
-Usage:
-    python aiart.py
-    python aiart.py --dry-run
 """
 
 import argparse
@@ -19,6 +15,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 from openai import OpenAI
@@ -33,222 +30,192 @@ if _env.exists():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY      = os.getenv("GROQ_API_KEY", "")
-CIVITAI_API_TOKEN = os.getenv("CIVITAI_API_TOKEN", "")
-OUTPUT_PATH       = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
-
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+OUTPUT_PATH  = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
-FALLBACKS = ["Visions of the Machine", "Dreams in Pixels", "The Synthetic Eye",
-             "Worlds Made of Light", "Neural Reverie", "The Imagined Real"]
+
+THEME_CANDIDATES = [
+    "megacity vertical farms feeding millions",
+    "fusion power plants lighting the grid",
+    "lab-grown meat factories of the future",
+    "underwater cities on the ocean floor",
+    "autonomous drone highways over cities",
+    "neural interface offices — no screens, just thought",
+    "climate-controlled biodomes in the desert",
+    "carbon-capture forests planted by robots",
+    "space elevators connecting Earth to orbit",
+    "humanoid robots working alongside humans",
+    "AI doctors diagnosing in real time",
+    "geoengineering clouds to cool the planet",
+    "augmented reality overlaid on everyday streets",
+    "solar panel deserts powering continents",
+    "gene-edited crops growing in arctic cold",
+    "floating residential platforms on rising seas",
+    "hyperloop terminals connecting continents",
+    "personal exosuits for everyday mobility",
+    "smart forests managed by AI ecologists",
+    "quantum computing centres in orbit",
+    "fully circular cities with zero waste",
+    "bioluminescent architecture replacing streetlights",
+    "de-extinction programmes — woolly mammoths return",
+    "mind-uploading clinics in 2050",
+    "3D-printed houses built overnight",
+    "self-healing infrastructure — roads that repair",
+    "children born into a post-scarcity world",
+    "the last coal plant decommissioned",
+    "first permanent Mars colony established",
+    "ocean plastic harvested to build cities",
+]
+
+IMAGE_SIZES = [
+    (768, 1024),
+    (1024, 768),
+    (1024, 1024),
+    (768, 512),
+    (512, 768),
+]
 
 
-def fetch_civitai(count: int = 30) -> list[dict]:
-    headers = {"Authorization": f"Bearer {CIVITAI_API_TOKEN}", "Content-Type": "application/json"}
-    url = f"https://civitai.com/api/v1/images?limit={count}&sort=Most+Reactions&period=Day&nsfw=None&type=image"
-    for attempt in range(3):
-        try:
-            r = requests.get(url, headers=headers, timeout=20)
-            logger.info("Civitai status: %d", r.status_code)
-            r.raise_for_status()
-            items = r.json().get("items", [])
-            results = []
-            for img in items:
-                src = img.get("url", "")
-                if not src:
-                    continue
-                src = src.replace("/original=true/", "/width=1200/")
-                meta   = img.get("meta") or {}
-                stats  = img.get("stats") or {}
-                results.append({
-                    "url":      src,
-                    "prompt":   (meta.get("prompt") or "")[:160],
-                    "hearts":   stats.get("heartCount", 0),
-                    "likes":    stats.get("likeCount", 0),
-                    "username": img.get("username", ""),
-                    "width":    img.get("width", 800),
-                    "height":   img.get("height", 600),
-                    "id":       img.get("id", ""),
-                })
-            logger.info("Civitai: %d images", len(results))
-            return results
-        except Exception as e:
-            logger.warning("Civitai attempt %d failed: %s", attempt + 1, e)
-    return []
-
-
-def groq_headline(date_str: str, images: list[dict]) -> str:
-    if not GROQ_API_KEY:
-        return FALLBACKS[hash(date_str) % len(FALLBACKS)]
-    prompts = [img["prompt"][:80] for img in images if img.get("prompt")][:5]
-    ctx = "\n".join(f"- {p}" for p in prompts) if prompts else "top voted AI art"
+def pick_theme_and_prompts(date_str: str, count: int = 20) -> tuple[str, list[str]]:
+    seed_theme = THEME_CANDIDATES[hash(date_str) % len(THEME_CANDIDATES)]
     try:
         resp = groq.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "Return only a headline — 3 to 5 words, poetic, no quotes, no punctuation at end."},
-                {"role": "user",   "content": f"Today is {date_str}. Magazine headline for today's top voted AI art gallery.\n{ctx}"}
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a visionary AI art director specialising in near-future world-building. "
+                        "Your gallery depicts life in 2050 — photorealistic, plausible, awe-inspiring. "
+                        "Return only valid JSON, no markdown, no code fences."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"""Today is {date_str}. Seed theme: '{seed_theme}'.
+
+Refine this into a vivid, specific daily theme (5-8 words) set in the year 2050, then generate {count} unique image prompts around it.
+
+Rules:
+- Every prompt must depict a believable, high-quality vision of the world in 2050
+- Each prompt: 12-20 words, visually distinct, photorealistic
+- Mix portrait, landscape and square compositions
+- Include style cues: 'cinematic lighting', 'photorealistic 8k', 'golden hour', 'aerial view', 'street level', 'hyperdetailed'
+- Show real human life — people, cities, nature, technology coexisting
+- Optimistic but realistic — not utopia, not dystopia
+
+Return ONLY this JSON:
+{{"theme": "the refined theme", "prompts": ["prompt 1", "prompt 2", ...]}}"""
+                }
             ],
-            temperature=0.85, max_tokens=20,
+            temperature=0.9,
+            max_tokens=1400,
         )
-        return resp.choices[0].message.content.strip().strip('"\'').rstrip(".")
+        content = resp.choices[0].message.content.strip()
+        content = re.sub(r"^```[\w]*\n?", "", content).strip()
+        content = re.sub(r"\n?```$", "", content).strip()
+        data = json.loads(content)
+        theme = data.get("theme", seed_theme)
+        prompts = data.get("prompts", [])[:count]
+        logger.info("Theme: %s | %d prompts generated", theme, len(prompts))
+        return theme, prompts
     except Exception as e:
         logger.warning("Groq failed: %s", e)
-        return FALLBACKS[hash(date_str) % len(FALLBACKS)]
+        return seed_theme, [f"{seed_theme} in 2050, photorealistic 8k, variation {i+1}" for i in range(count)]
 
 
-def build_html(images: list[dict], headline: str, date_str: str, generated_at: str) -> str:
-    images_json = json.dumps(images, ensure_ascii=False)
-    count = len(images)
+def make_pollinations_url(prompt: str, width: int = 1024, height: int = 768, seed: int = 42) -> str:
+    encoded = quote(prompt)
+    return f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&seed={seed}&nologo=true&enhance=true&model=flux"
+
+
+def build_images(prompts: list[str]) -> list[dict]:
+    images = []
+    for i, prompt in enumerate(prompts):
+        w, h = IMAGE_SIZES[i % len(IMAGE_SIZES)]
+        url = make_pollinations_url(prompt, width=w, height=h, seed=i * 7 + 42)
+        images.append({"src": url, "prompt": prompt, "width": w, "height": h})
+    return images
+
+
+def build_html(images: list[dict], theme: str, date_str: str) -> str:
+    def safe(s):
+        return s.replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+
+    cards_html = ""
+    for img in images:
+        ps = safe(img["prompt"])
+        pd = safe(img["prompt"][:140]) + ("…" if len(img["prompt"]) > 140 else "")
+        cards_html += f'''
+    <div class="card">
+      <img src="{img['src']}" alt="{ps}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').style.display='none'">
+      <div class="overlay"><p class="prompt-text">{pd}</p></div>
+    </div>'''
+
+    no_img = "" if images else '<p style="color:#666;text-align:center;padding:80px 0;grid-column:1/-1">No images today.</p>'
+    gen_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Art Daily — {date_str}</title>
+<title>Life in 2050 — {date_str}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap" rel="stylesheet">
 <style>
-  :root {{ --bg:#080808; --surface:#111; --border:#1e1e1e; --text:#e8e8e8; --dim:#777; --accent:#c084fc; --accent2:#38bdf8; }}
-  * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; }}
-  .header {{ padding:48px 40px 36px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,#0d0d0d 0%,var(--bg) 100%); }}
-  .header-inner {{ max-width:1600px; margin:0 auto; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; }}
-  .site-name {{ font-size:11px; font-weight:700; letter-spacing:.25em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }}
-  .header-title {{ font-family:'Playfair Display',serif; font-size:clamp(28px,5vw,54px); font-weight:900; line-height:1.1; color:#fff; }}
-  .header-title em {{ color:var(--accent); font-style:italic; }}
-  .header-right {{ text-align:right; }}
-  .header-date {{ font-size:13px; color:var(--dim); font-weight:500; margin-bottom:6px; }}
-  .image-count {{ font-size:11px; color:var(--dim); }}
-  .gallery-wrap {{ max-width:1600px; margin:0 auto; padding:36px 24px 60px; }}
-  .masonry {{ columns:4 280px; column-gap:14px; }}
-  .card {{ position:relative; break-inside:avoid; margin-bottom:14px; border-radius:10px; overflow:hidden; background:var(--surface); cursor:pointer; transition:transform .2s,box-shadow .2s; }}
-  .card:hover {{ transform:translateY(-3px); box-shadow:0 16px 40px rgba(0,0,0,.7); z-index:2; }}
-  .card img {{ display:block; width:100%; height:auto; transition:filter .3s; }}
-  .card:hover img {{ filter:brightness(.3); }}
-  .overlay {{ position:absolute; inset:0; padding:16px; display:flex; flex-direction:column; justify-content:flex-end; gap:5px; opacity:0; transition:opacity .3s; pointer-events:none; background:linear-gradient(to top,rgba(0,0,0,.88) 0%,transparent 60%); }}
-  .card:hover .overlay {{ opacity:1; pointer-events:auto; }}
-  .overlay-actions {{ display:flex; gap:8px; margin-bottom:4px; }}
-  .overlay-btn {{ font-size:11px; font-weight:600; padding:4px 10px; border-radius:5px; text-decoration:none; cursor:pointer; border:none; }}
-  .btn-img {{ background:rgba(255,255,255,.15); color:#fff; }}
-  .btn-img:hover {{ background:rgba(255,255,255,.25); }}
-  .btn-civitai {{ background:rgba(192,132,252,.2); color:var(--accent); border:1px solid var(--accent); }}
-  .btn-civitai:hover {{ background:rgba(192,132,252,.35); }}
-  .reactions {{ font-size:12px; font-weight:600; color:rgba(255,255,255,.9); }}
-  .by {{ font-size:11px; color:var(--accent); font-weight:600; }}
-  .prompt {{ font-size:11px; line-height:1.5; color:rgba(255,255,255,.8); font-style:italic; word-break:break-word; }}
-  .regen-wrap {{ text-align:center; padding:28px 0 0; }}
-  .regen-btn {{ background:#1a1a1a; color:var(--accent); border:1px solid var(--accent); padding:10px 28px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; letter-spacing:.05em; transition:background .15s; }}
-  .regen-btn:hover {{ background:#2a1a3a; }}
-  .footer {{ border-top:1px solid var(--border); padding:20px 40px; max-width:1600px; margin:0 auto; display:flex; justify-content:space-between; font-size:11px; color:var(--dim); }}
-  .footer a {{ color:var(--accent2); text-decoration:none; }}
-  @media(max-width:600px) {{
-    .header {{ padding:28px 20px 20px; }} .gallery-wrap {{ padding:20px 12px 50px; }}
-    .masonry {{ columns:2 160px; column-gap:8px; }} .card {{ margin-bottom:8px; border-radius:6px; }}
-    .header-right {{ display:none; }}
-  }}
+:root{{--bg:#080808;--surface:#0d1117;--border:#1e1e1e;--text:#e8e8e8;--dim:#777;--accent:#38bdf8;--accent2:#c084fc}}
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}}
+.header{{padding:48px 40px 36px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#060c18 0%,var(--bg) 100%)}}
+.header-inner{{max-width:1600px;margin:0 auto;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px}}
+.site-name{{font-size:11px;font-weight:700;letter-spacing:.25em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}}
+.header-title{{font-family:'Playfair Display',serif;font-size:clamp(28px,5vw,54px);font-weight:900;line-height:1.1;color:#fff}}
+.header-title em{{color:var(--accent);font-style:italic}}
+.header-sub{{margin-top:10px;font-size:13px;color:var(--dim)}}
+.header-right{{text-align:right}}
+.header-date{{font-size:13px;color:var(--dim);font-weight:500;margin-bottom:6px}}
+.image-count{{font-size:11px;color:var(--dim);letter-spacing:.08em}}
+.gallery-wrap{{max-width:1600px;margin:0 auto;padding:36px 24px 80px}}
+.loading-note{{text-align:center;font-size:12px;color:var(--dim);margin-bottom:28px;font-style:italic}}
+.masonry{{columns:4 280px;column-gap:14px}}
+.card{{position:relative;break-inside:avoid;margin-bottom:14px;border-radius:10px;overflow:hidden;background:var(--surface);cursor:pointer;transition:transform .2s,box-shadow .2s}}
+.card:hover{{transform:translateY(-3px);box-shadow:0 16px 40px rgba(0,0,0,.7);z-index:2}}
+.card img{{display:block;width:100%;height:auto;min-height:180px;transition:filter .3s;background:#060c18}}
+.card:hover img{{filter:brightness(.3)}}
+.overlay{{position:absolute;inset:0;padding:16px;display:flex;align-items:flex-end;opacity:0;transition:opacity .3s;pointer-events:none}}
+.card:hover .overlay{{opacity:1}}
+.prompt-text{{font-size:12px;line-height:1.55;color:rgba(255,255,255,.92);font-style:italic;text-shadow:0 1px 4px rgba(0,0,0,.9);word-break:break-word}}
+.footer{{border-top:1px solid var(--border);padding:20px 40px;max-width:1600px;margin:0 auto;display:flex;justify-content:space-between;font-size:11px;color:var(--dim)}}
+.footer a{{color:var(--accent2);text-decoration:none}}
+.footer a:hover{{text-decoration:underline}}
+@media(max-width:600px){{.header{{padding:28px 20px 20px}}.gallery-wrap{{padding:20px 12px 60px}}.masonry{{columns:2 160px;column-gap:8px}}.card{{margin-bottom:8px;border-radius:6px}}.header-right{{display:none}}}}
 </style>
 </head>
 <body>
 <div class="header">
   <div class="header-inner">
     <div>
-      <div class="site-name">AI Art Daily · Top Voted</div>
-      <h1 class="header-title"><em>{headline}</em></h1>
+      <div class="site-name">Life in 2050 · Daily Vision</div>
+      <h1 class="header-title"><em>{theme}</em></h1>
+      <p class="header-sub">AI-generated predictions of the world we're building</p>
     </div>
     <div class="header-right">
       <div class="header-date">{date_str}</div>
-      <div class="image-count" id="count-label">{count} images · <a href="https://civitai.com" target="_blank" style="color:var(--accent2);text-decoration:none">Civitai</a></div>
+      <div class="image-count">{len(images)} images · Flux · Pollinations.ai</div>
     </div>
   </div>
 </div>
-
 <div class="gallery-wrap">
-  <div class="masonry" id="grid"></div>
-  <div class="regen-wrap">
-    <button class="regen-btn" onclick="showBatch()">↻ Load New Batch</button>
+  <p class="loading-note">Images generate on load — give them a moment ✨</p>
+  <div class="masonry">
+    {cards_html}
+    {no_img}
   </div>
 </div>
-
 <div class="footer">
-  <span>Updated {generated_at} · Top voted AI art via <a href="https://civitai.com" target="_blank">Civitai</a></span>
+  <span>Generated {gen_time} · Images via <a href="https://pollinations.ai" target="_blank">Pollinations.ai</a> · Prompts by Groq</span>
   <span><a href="/daily.html">← Daily Brief</a></span>
 </div>
-
-<script>
-// Initial images baked in — shown instantly on page load
-const INITIAL = {images_json};
-
-function renderCards(images) {{
-  const grid = document.getElementById('grid');
-  const countLabel = document.getElementById('count-label');
-  grid.innerHTML = '';
-  images.forEach(img => {{
-    const civitaiUrl = img.id ? `https://civitai.com/images/${{img.id}}` : 'https://civitai.com';
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `
-      <img src="${{img.url}}" loading="lazy" width="${{img.width}}" height="${{img.height}}" onerror="this.closest('.card').remove()">
-      <div class="overlay">
-        <div class="overlay-actions">
-          <a class="overlay-btn btn-img" href="${{img.url}}" target="_blank">🔍 Full image</a>
-          <a class="overlay-btn btn-civitai" href="${{civitaiUrl}}" target="_blank">↗ Civitai</a>
-        </div>
-        ${{(img.hearts||img.likes) ? `<div class="reactions">❤️ ${{img.hearts.toLocaleString()}} &nbsp;👍 ${{img.likes.toLocaleString()}}</div>` : ''}}
-        ${{img.username ? `<div class="by">by ${{img.username}}</div>` : ''}}
-        ${{img.prompt ? `<p class="prompt">${{img.prompt.slice(0,160)}}${{img.prompt.length>160?'…':''}}</p>` : ''}}
-      </div>`;
-    grid.appendChild(card);
-  }});
-  countLabel.innerHTML = images.length + ' images · <a href="https://civitai.com" target="_blank" style="color:var(--accent2);text-decoration:none">Civitai</a>';
-}}
-
-async function loadBatch() {{
-  const btn = document.querySelector('.regen-btn');
-  btn.disabled = true;
-  btn.textContent = 'Loading…';
-
-  // Rotate sort/period combos — Civitai ignores page param, but different combos give different images
-  const combos = [
-    ['Most+Reactions','Week'],   ['Most+Reactions','Month'],
-    ['Most+Comments','Week'],    ['Most+Comments','Month'],   ['Most+Comments','AllTime'],
-    ['Newest','AllTime'],        ['Newest','Month'],
-    ['Most+Reactions','Year'],   ['Most+Comments','Year'],    ['Newest','Year'],
-  ];
-  const [sort, period] = combos[Math.floor(Math.random() * combos.length)];
-  const url = `https://civitai.com/api/v1/images?limit=20&sort=${{sort}}&period=${{period}}&nsfw=None&type=image`;
-
-  try {{
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const items = (await r.json()).items || [];
-    const images = items.filter(i => i.url).slice(0, 20).map(i => {{
-      const meta = i.meta || {{}};
-      const stats = i.stats || {{}};
-      return {{
-        url: i.url.replace('/original=true/', '/width=1200/'),
-        prompt: (meta.prompt || '').slice(0, 160),
-        hearts: stats.heartCount || 0,
-        likes: stats.likeCount || 0,
-        username: i.username || '',
-        width: i.width || 800,
-        height: i.height || 600,
-        id: i.id || '',
-      }};
-    }});
-    if (images.length) renderCards(images);
-    else throw new Error('No images returned');
-  }} catch(e) {{
-    // Fall back to initial set on error
-    renderCards(INITIAL);
-  }}
-
-  btn.disabled = false;
-  btn.textContent = '↻ Load New Batch';
-}}
-
-// Show baked-in images immediately
-renderCards(INITIAL);
-</script>
 </body>
 </html>"""
 
@@ -259,41 +226,35 @@ def ftp_upload(local_path: Path, remote_filename: str = "AiArt.html"):
     pwd  = os.getenv("FTP_PASS", "")
     path = os.getenv("FTP_PATH", "/public_html/")
     if not all([host, user, pwd]):
-        logger.warning("FTP credentials not set — skipping upload")
+        logger.warning("FTP credentials not set — skipping")
         return False
-    for attempt in range(3):
-        try:
-            with ftplib.FTP_TLS(host, timeout=30) as ftp:
-                ftp.login(user, pwd)
-                ftp.cwd(path)
-                with open(local_path, "rb") as f:
-                    ftp.storbinary(f"STOR {remote_filename}", f)
-            logger.info("✅ Uploaded to https://jonestech.xyz/%s", remote_filename)
-            return True
-        except Exception as e:
-            logger.warning("FTP attempt %d failed: %s", attempt + 1, e)
-    logger.error("All FTP attempts failed")
-    return False
+    try:
+        with ftplib.FTP_TLS(host, timeout=30) as ftp:
+            ftp.login(user, pwd)
+            ftp.prot_p()
+            ftp.cwd(path)
+            with open(local_path, "rb") as f:
+                ftp.storbinary(f"STOR {remote_filename}", f)
+        logger.info("Uploaded to https://jonestech.xyz/%s", remote_filename)
+        return True
+    except Exception as e:
+        logger.error("FTP failed: %s", e)
+        return False
 
 
 def main(dry_run: bool = False):
-    date_str     = datetime.now().strftime("%A %-d %B %Y")
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    logger.info("🎨 Building AiArt Daily Gallery — %s", date_str)
-
-    images   = fetch_civitai(count=30)
-    headline = groq_headline(date_str, images)
-    html     = build_html(images, headline, date_str, generated_at)
-
+    date_str = datetime.now().strftime("%A %-d %B %Y")
+    logger.info("Building Life in 2050 Gallery — %s", date_str)
+    theme, prompts = pick_theme_and_prompts(date_str, count=20)
+    images = build_images(prompts)
+    html = build_html(images, theme, date_str)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
-    logger.info("✅ Saved (%d images)", len(images))
-
+    logger.info("Saved %d images to %s", len(images), OUTPUT_PATH)
     if dry_run:
         logger.info("Dry run — skipping FTP")
         return
-
     ftp_upload(OUTPUT_PATH)
-    logger.info("🎉 Done!")
+    logger.info("Done!")
 
 
 if __name__ == "__main__":
