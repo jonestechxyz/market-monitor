@@ -111,8 +111,8 @@ Rules:
 - Every prompt must feel genuinely 2050 — not incremental, but transformative
 - Show things that don't exist yet: healed ecosystems, mature space civilisation, post-scarcity abundance, AGI integrated daily life
 - Each prompt: 15-25 words, visually stunning, photorealistic or cinematic
-- Mix portrait, landscape, aerial, street-level compositions
-- Style cues: 'photorealistic 8k', 'cinematic lighting', 'hyperdetailed', 'golden hour', 'epic scale', 'award-winning photography'
+- CRITICAL — every prompt must differ visually: vary time of day, camera angle, scale, colour palette, setting and subject
+- Use a different primary visual style for each: e.g. 'macro close-up', 'wide aerial panorama', 'street-level portrait', 'interior', 'underwater', 'night scene', 'golden hour landscape', 'bird's eye view', 'misty morning', 'dramatic storm lighting'
 - Real human emotion — wonder, joy, peace, awe — in every scene
 - If the theme is utopian, lean into it fully — make it beautiful and believable
 
@@ -183,10 +183,8 @@ def build_html(images: list[dict], theme: str, date_str: str) -> str:
         ps = safe(img["prompt"])
         pd = safe(img["prompt"][:140]) + ("…" if len(img["prompt"]) > 140 else "")
         cards_html += f'''
-    <div class="card">
-      <a href="{img['src']}" target="_blank" rel="noopener" title="Open full size">
-        <img src="{img['src']}" alt="{ps}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').style.display='none'">
-      </a>
+    <div class="card" onclick="openFull(this)" style="cursor:zoom-in" data-src="{img['src']}">
+      <img src="{img['src']}" alt="{ps}" loading="lazy" width="{img['width']}" height="{img['height']}" onerror="this.closest('.card').style.display='none'">
       <div class="overlay"><p class="prompt-text">{pd}</p></div>
     </div>'''
 
@@ -254,6 +252,15 @@ body{{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-
   <span>Generated {gen_time} · Images via <a href="https://huggingface.co/black-forest-labs/FLUX.1-schnell" target="_blank">FLUX.1-schnell</a> · Prompts by Groq</span>
   <span><a href="/daily.html">← Daily Brief</a></span>
 </div>
+<script>
+function openFull(card) {{
+  var src = card.getAttribute('data-src');
+  if (!src) return;
+  var w = window.open('', '_blank');
+  w.document.write('<html><head><title>2050</title><style>*{{margin:0;padding:0}}body{{background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}}img{{max-width:100%;max-height:100vh;object-fit:contain}}</style></head><body><img src="' + src + '"></body></html>');
+  w.document.close();
+}}
+</script>
 </body>
 </html>"""
 
