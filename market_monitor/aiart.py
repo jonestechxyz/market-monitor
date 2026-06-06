@@ -40,36 +40,38 @@ OUTPUT_PATH    = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
 
 THEME_CANDIDATES = [
-    "megacity vertical farms feeding millions",
-    "fusion power plants lighting the grid",
-    "lab-grown meat factories of the future",
-    "underwater cities on the ocean floor",
-    "autonomous drone highways over cities",
-    "neural interface offices — no screens, just thought",
-    "climate-controlled biodomes in the desert",
-    "carbon-capture forests planted by robots",
-    "space elevators connecting Earth to orbit",
-    "humanoid robots working alongside humans",
-    "AI doctors diagnosing in real time",
-    "geoengineering clouds to cool the planet",
-    "augmented reality overlaid on everyday streets",
-    "solar panel deserts powering continents",
-    "gene-edited crops growing in arctic cold",
-    "floating residential platforms on rising seas",
-    "hyperloop terminals connecting continents",
-    "personal exosuits for everyday mobility",
-    "smart forests managed by AI ecologists",
-    "quantum computing centres in orbit",
-    "fully circular cities with zero waste",
-    "bioluminescent architecture replacing streetlights",
-    "de-extinction programmes — woolly mammoths return",
-    "mind-uploading clinics in 2050",
-    "3D-printed houses built overnight",
-    "self-healing infrastructure — roads that repair",
-    "children born into a post-scarcity world",
-    "the last coal plant decommissioned",
-    "first permanent Mars colony established",
-    "ocean plastic harvested to build cities",
+    # 2050 Utopia
+    "2050 Utopia — humanity finally got it right",
+    "post-scarcity Earth: abundance for all eight billion",
+    "the age of longevity: humans living to 150",
+    "Earth healed — rewilded continents, clean oceans, blue sky",
+    "universal basic everything: food, shelter, health, purpose",
+    "the end of disease — gene therapy cures all",
+    "a world without war: the first peaceful generation",
+    "education everywhere: every child on Earth learning freely",
+    "the great restoration: coral reefs alive again",
+    # Deep future tech
+    "brain-computer interfaces as natural as glasses",
+    "AGI partners: artificial minds collaborating with humans daily",
+    "matter compilers: printing anything from raw molecules",
+    "orbital solar farms beaming clean energy to Earth",
+    "the space elevator opens — first civilians ride to orbit",
+    "permanent lunar base: 10,000 humans living on the Moon",
+    "Mars City at ten years old — 50,000 residents",
+    "quantum internet: unhackable, instant, global",
+    "nanobots in the bloodstream performing surgery from within",
+    "conscious AI cities managing themselves without human input",
+    # Society & daily life in 2050
+    "streets without cars: silent, green, walkable megacities",
+    "floating ocean cities harvesting wave energy",
+    "vertical rainforests growing inside skyscrapers",
+    "children who have never seen pollution",
+    "teleportation terminals replacing airports",
+    "the last fossil fuel plant: a museum exhibit",
+    "digital-physical fusion: reality indistinguishable from simulation",
+    "humans and robots sharing neighbourhoods as equals",
+    "de-extinction complete: woolly mammoths roam Siberia again",
+    "deep ocean cities glowing on the seafloor",
 ]
 
 IMAGE_SIZES = [
@@ -90,8 +92,12 @@ def pick_theme_and_prompts(date_str: str, count: int = 20) -> tuple[str, list[st
                 {
                     "role": "system",
                     "content": (
-                        "You are a visionary AI art director specialising in near-future world-building. "
-                        "Your gallery depicts life in 2050 — photorealistic, plausible, awe-inspiring. "
+                        "You are a visionary AI art director creating a daily gallery called 'Life in 2050'. "
+                        "This is NOT 2028. This is 2050 — a world that has genuinely transformed. "
+                        "Technology is mature, abundant, woven into daily life. Cities are unrecognisable. "
+                        "Climate change was solved. Poverty largely ended. Space is being settled. "
+                        "Your images should feel IMPOSSIBLE today but completely believable by 2050. "
+                        "Think 30 years further than now — as different as 1994 is from today. "
                         "Return only valid JSON, no markdown, no code fences."
                     )
                 },
@@ -99,15 +105,16 @@ def pick_theme_and_prompts(date_str: str, count: int = 20) -> tuple[str, list[st
                     "role": "user",
                     "content": f"""Today is {date_str}. Seed theme: '{seed_theme}'.
 
-Refine this into a vivid, specific daily theme (5-8 words) set in the year 2050, then generate {count} unique image prompts around it.
+Refine this into a vivid, specific daily theme (5-8 words) firmly set in 2050, then generate {count} unique image prompts.
 
 Rules:
-- Every prompt must depict a believable, high-quality vision of the world in 2050
-- Each prompt: 12-20 words, visually distinct, photorealistic
-- Mix portrait, landscape and square compositions
-- Include style cues: 'cinematic lighting', 'photorealistic 8k', 'golden hour', 'aerial view', 'street level', 'hyperdetailed'
-- Show real human life — people, cities, nature, technology coexisting
-- Optimistic but realistic — not utopia, not dystopia
+- Every prompt must feel genuinely 2050 — not incremental, but transformative
+- Show things that don't exist yet: healed ecosystems, mature space civilisation, post-scarcity abundance, AGI integrated daily life
+- Each prompt: 15-25 words, visually stunning, photorealistic or cinematic
+- Mix portrait, landscape, aerial, street-level compositions
+- Style cues: 'photorealistic 8k', 'cinematic lighting', 'hyperdetailed', 'golden hour', 'epic scale', 'award-winning photography'
+- Real human emotion — wonder, joy, peace, awe — in every scene
+- If the theme is utopian, lean into it fully — make it beautiful and believable
 
 Return ONLY this JSON:
 {{"theme": "the refined theme", "prompts": ["prompt 1", "prompt 2", ...]}}"""
