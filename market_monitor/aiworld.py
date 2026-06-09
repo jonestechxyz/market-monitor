@@ -133,9 +133,9 @@ def groq_brief(items: list[dict]) -> dict:
                         "{\n"
                         '  "lead": {"source_index": n, "region": "City, COUNTRY", '
                         '"title": "...", "body": ["para1", "para2", "para3"]},\n'
-                        '  "marvel": [ up to 4 of {"source_index": n, "region": "City, COUNTRY", '
+                        '  "marvel": [ up to 6 of {"source_index": n, "region": "City, COUNTRY", '
                         '"title": "...", "body": ["para1", "para2"]} ],\n'
-                        '  "panic":  [ up to 4 of {"source_index": n, "region": "City, COUNTRY", '
+                        '  "panic":  [ up to 6 of {"source_index": n, "region": "City, COUNTRY", '
                         '"title": "...", "body": ["para1", "para2"]} ]\n'
                         "}\n\n"
                         "Rules:\n"
@@ -144,17 +144,18 @@ def groq_brief(items: list[dict]) -> dict:
                         "it matters globally.\n"
                         "- MARVEL = genuinely useful / impressive / hopeful uses; each 2 paragraphs.\n"
                         "- PANIC = worrying / risky / cautionary developments; each 2 paragraphs.\n"
+                        "- Aim for 5-6 entries in EACH of marvel and panic — a full, satisfying read.\n"
                         "- Each paragraph 2-4 sentences, specific and informative.\n"
                         "- region is a short dateline like 'Shenzhen, China' or 'Seoul, South Korea'.\n"
                         "- source_index is the headline number the entry is based on.\n"
-                        "- Cover at least 4 different countries across the whole dispatch.\n\n"
+                        "- Cover at least 5 different countries across the whole dispatch.\n\n"
                         f"Headlines:\n{numbered}\n\n"
                         "Return ONLY the JSON object."
                     ),
                 },
             ],
             temperature=0.65,
-            max_tokens=4000,
+            max_tokens=6000,
         )
         content = resp.choices[0].message.content.strip()
         content = re.sub(r"^```[\w]*\n?", "", content).strip()
@@ -162,8 +163,8 @@ def groq_brief(items: list[dict]) -> dict:
         match = re.search(r"\{.*\}", content, re.DOTALL)
         if match:
             data = json.loads(match.group(0))
-            data["marvel"] = (data.get("marvel") or [])[:4]
-            data["panic"]  = (data.get("panic") or [])[:4]
+            data["marvel"] = (data.get("marvel") or [])[:6]
+            data["panic"]  = (data.get("panic") or [])[:6]
             return data
     except Exception as e:
         logger.error("Groq brief failed: %s", e)
@@ -193,7 +194,8 @@ def _source(entry: dict) -> str:
     if not link:
         return ""
     label = entry.get("source") or "Read the source"
-    return f'<a class="src" href="{link}" target="_blank" rel="noopener">{label} ↗</a>'
+    # Arrow added via CSS ::after so Edge "Read aloud" doesn't speak it.
+    return f'<a class="src" href="{link}" target="_blank" rel="noopener">{label}</a>'
 
 def _entry(e: dict) -> str:
     region = (e.get("region") or "").upper()
@@ -302,6 +304,7 @@ def build_html(data: dict, date_str: str) -> str:
     font-family: 'Space Grotesk', sans-serif; font-size: 12px; letter-spacing: 0.04em;
     color: var(--link); text-decoration: none; display: inline-block; margin-top: 4px;
   }}
+  .src::after {{ content: " \\2197"; }}  /* arrow is decorative — not read aloud */
   .src:hover {{ text-decoration: underline; }}
   .empty {{ font-style: italic; color: var(--ink-soft); padding: 20px 0; }}
   /* ── FOOTER ── */
@@ -385,7 +388,7 @@ def main(dry_run: bool = False):
     all_items = []
     for query in NEWS_QUERIES:
         logger.info("Fetching: %s", query[:50])
-        all_items.extend(fetch_rss(query, limit=7))
+        all_items.extend(fetch_rss(query, limit=8))
 
     # Deduplicate by title
     seen, items = set(), []
@@ -398,7 +401,7 @@ def main(dry_run: bool = False):
 
     # 2. Groq writes the dispatch
     logger.info("Asking Groq to write the dispatch...")
-    data = groq_brief(items[:70])
+    data = groq_brief(items[:80])
     if data.get("lead"):
         attach_link(data["lead"], items)
     data["marvel"] = [attach_link(e, items) for e in data.get("marvel", [])]
