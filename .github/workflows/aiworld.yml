@@ -2,8 +2,11 @@ name: AIWorld Daily — Marvel & Panic
 
 on:
   schedule:
-    # 10:00 UTC daily — after aiart (08:00) and madworld (09:00)
-    - cron: "0 10 * * *"
+    # 02:07 UTC daily — live before 6am Denmark time year-round.
+    # DK is UTC+1 (winter) / UTC+2 (summer), so 6am DK = 04:00–05:00 UTC;
+    # 02:07 leaves a buffer for GitHub Actions' scheduling lag. Off-the-hour
+    # minute (:07) tends to start more promptly than :00.
+    - cron: "7 2 * * *"
   workflow_dispatch:  # allow manual runs from the Actions tab
 
 jobs:
