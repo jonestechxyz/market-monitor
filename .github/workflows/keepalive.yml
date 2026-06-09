@@ -2,8 +2,8 @@ name: Keep Alive
 
 on:
   schedule:
-    # Every Sunday at 06:00 UTC
-    - cron: "0 6 * * 0"
+    # Every day at 06:00 UTC — keeps scheduled workflows alive
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 permissions:
