@@ -1,10 +1,12 @@
 """
-AIWorld.html — "The Marvel & The Panic" daily AI use-case showcase.
+AIWorld.html — "The Marvel & The Panic": a daily global dispatch on what the
+world is actually doing with AI, in the spirit of the BBC's "Tomorrow's World".
 
-Scans today's news for the most interesting real-world ways people are using AI,
-splits them into THE MARVEL (inspiring, useful, amazing) and THE PANIC (scary,
-chaotic, cautionary), writes punchy summaries with Groq, and illustrates each
-with Pollinations.ai (free, no API key, no quota).
+Text-forward, no images, more meat: scans AI news from around the world
+(China, South Korea, Japan, Europe, India, the Gulf, the US and beyond),
+then uses Groq to write a longer lead dispatch plus richer, multi-paragraph
+entries split into THE MARVEL (where it's going right) and THE PANIC (where
+it's going wrong) — each with a region dateline and a source link.
 
 Usage:
     python aiworld.py
@@ -13,7 +15,6 @@ Usage:
 
 import argparse
 import ftplib
-import hashlib
 import json
 import logging
 import os
@@ -38,41 +39,36 @@ if _env.exists():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY  = os.getenv("GROQ_API_KEY", "")
-SKIP_IMAGES   = os.getenv("SKIP_IMAGES", "").lower() in ("1", "true", "yes")
-OUTPUT_PATH   = Path(os.getenv("OUTPUT_PATH", "/tmp/AIWorld.html"))
-RSS_BASE      = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+OUTPUT_PATH  = Path(os.getenv("OUTPUT_PATH", "/tmp/AIWorld.html"))
+RSS_BASE     = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
 
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
 
-# Image style suffixes per side — keeps the two halves visually distinct.
-MARVEL_STYLE = (
-    "bright luminous hopeful editorial illustration, warm golden and teal palette, "
-    "clean modern flat vector art, optimistic, glowing, inspiring, high detail"
-)
-PANIC_STYLE = (
-    "dark ominous editorial illustration, deep red and black palette, glitch and "
-    "static texture, unsettling, dramatic shadows, cautionary, cinematic, high detail"
-)
-
-# Wide net of AI use-case topics — both the marvelous and the alarming.
+# Wide, deliberately GLOBAL net — regions first, then cross-cutting use-cases.
 NEWS_QUERIES = [
-    "AI breakthrough OR AI helped OR AI saved lives",
-    "ChatGPT OR Claude OR Gemini used for OR helped",
-    "AI medicine OR AI diagnosis OR AI healthcare discovery",
-    "AI scam OR AI fraud OR deepfake victim",
-    "AI job loss OR AI layoffs OR AI replacing workers",
-    "AI startup OR new AI tool OR AI app launched",
-    "AI art OR AI music OR AI film creativity",
-    "AI fail OR AI hallucination OR AI mistake lawsuit",
-    "AI science OR AI research OR AI discovery breakthrough",
-    "students OR teachers using AI OR AI in classroom",
-    "AI accessibility OR AI disability OR AI translation",
-    "AI surveillance OR AI privacy OR AI bias controversy",
+    # ── regional coverage ──
+    "China AI OR DeepSeek OR Baidu OR Alibaba OR Huawei AI",
+    "South Korea AI OR Samsung AI OR Naver AI OR Korea robot",
+    "Japan AI OR robotics OR SoftBank AI OR Japan automation",
+    "India AI OR Bengaluru AI startup OR India AI mission",
+    "Europe AI OR EU AI Act OR DeepMind OR Mistral AI",
+    "UK AI OR Britain AI startup OR NHS AI",
+    "Middle East AI OR UAE AI OR Saudi Arabia AI OR G42",
+    "Taiwan AI OR TSMC AI chip OR Singapore AI",
+    "Africa AI OR Latin America AI OR Brazil AI",
+    # ── cross-cutting use-cases ──
+    "AI medicine OR AI diagnosis OR AI drug discovery",
+    "AI science OR AI research OR AI breakthrough lab",
+    "AI scam OR deepfake fraud OR AI disinformation",
+    "AI jobs OR AI layoffs OR AI replacing workers",
+    "AI education OR AI accessibility OR AI translation",
+    "AI energy OR AI climate OR AI agriculture",
+    "AI military OR AI surveillance OR AI weapons",
 ]
 
 # ── rss fetch ──────────────────────────────────────────────────────────────────
-def fetch_rss(query: str, max_age_hours: int = 36, limit: int = 6) -> list[dict]:
+def fetch_rss(query: str, max_age_hours: int = 48, limit: int = 7) -> list[dict]:
     url = RSS_BASE.format(query=urllib.parse.quote(query))
     try:
         r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
@@ -86,7 +82,6 @@ def fetch_rss(query: str, max_age_hours: int = 36, limit: int = 6) -> list[dict]
             title = item.findtext("title", "")
             link  = item.findtext("link", "")
             pub   = item.findtext("pubDate", "")
-            source = item.findtext("{http://www.w3.org/2005/Atom}source", "") or ""
             try:
                 pub_dt    = parsedate_to_datetime(pub)
                 age_hours = (now - pub_dt).total_seconds() / 3600
@@ -94,7 +89,6 @@ def fetch_rss(query: str, max_age_hours: int = 36, limit: int = 6) -> list[dict]
                     continue
             except Exception:
                 pass
-            # Google News appends " - Source" to titles; keep source, clean title.
             m = re.search(r"\s*-\s*([^-]+)$", title)
             src_name = m.group(1).strip() if m else ""
             clean_title = re.sub(r"\s*-\s*[^-]+$", "", title).strip()
@@ -106,10 +100,10 @@ def fetch_rss(query: str, max_age_hours: int = 36, limit: int = 6) -> list[dict]
         return []
 
 # ── groq ───────────────────────────────────────────────────────────────────────
-def groq_split_stories(items: list[dict]) -> dict:
-    """Ask Groq to pick the best AI use-cases and split them into marvel vs panic."""
+def groq_brief(items: list[dict]) -> dict:
+    """Ask Groq to write a lead dispatch + richer marvel/panic entries."""
     if not items:
-        return {"marvel": [], "panic": []}
+        return {}
     numbered = "\n".join(f"{i+1}. {it['title']}" for i, it in enumerate(items))
     try:
         resp = groq.chat.completions.create(
@@ -118,36 +112,49 @@ def groq_split_stories(items: list[dict]) -> dict:
                 {
                     "role": "system",
                     "content": (
-                        "You are the editor of 'AI World — The Marvel & The Panic', a sharp, "
-                        "human daily showcase of how people are ACTUALLY using AI right now. "
-                        "You love real, specific, concrete use-cases — a doctor who caught a "
-                        "tumor, a grandma who got scammed, a kid who built an app. You hate "
-                        "vague 'AI is powerful' filler. Write with clarity and a little "
-                        "personality. Return ONLY valid JSON, no markdown, no code fences."
+                        "You are the editor of 'AI World — The Marvel & The Panic', a daily "
+                        "global dispatch written in the spirit of the BBC's 'Tomorrow's World': "
+                        "curious, clear and demonstrative. You explain HOW a technology actually "
+                        "works, WHO is doing it and WHERE, WHY it matters, and WHAT happens next. "
+                        "You have a genuinely international eye — you actively surface what is "
+                        "happening in China, South Korea, Japan, India, Europe, the Gulf and the "
+                        "wider world, not just Silicon Valley. You write substantial, meaty prose "
+                        "with specifics and zero filler. No hype words, no 'game-changer', no "
+                        "'revolutionary'. Return ONLY valid JSON, no markdown, no code fences."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        "From these headlines, choose the best stories about REAL ways people "
-                        "are using (or being affected by) AI, and sort them into two groups:\n"
-                        "- MARVEL: genuinely amazing / useful / inspiring uses of AI\n"
-                        "- PANIC: worrying / chaotic / cautionary uses or consequences\n\n"
-                        "Pick up to 4 for MARVEL and up to 4 for PANIC (the strongest, most "
-                        "concrete, most distinct stories — skip duplicates and vague ones).\n\n"
-                        "For each story return:\n"
-                        '- "source_index": the number of the headline it came from\n'
-                        '- "title": a punchy 6-12 word rewritten headline\n'
-                        '- "summary": 2-3 plain-English sentences on what someone actually DID '
-                        "with AI and why it matters\n"
-                        '- "image_prompt": a vivid scene description for an illustration of this story\n\n'
+                        "From these headlines, build today's dispatch. Favour stories with a "
+                        "clear country/region and a concrete, real-world use of AI. Spread the "
+                        "coverage geographically — do not let it all be US/UK.\n\n"
+                        "Produce JSON with this exact shape:\n"
+                        "{\n"
+                        '  "lead": {"source_index": n, "region": "City, COUNTRY", '
+                        '"title": "...", "body": ["para1", "para2", "para3"]},\n'
+                        '  "marvel": [ up to 4 of {"source_index": n, "region": "City, COUNTRY", '
+                        '"title": "...", "body": ["para1", "para2"]} ],\n'
+                        '  "panic":  [ up to 4 of {"source_index": n, "region": "City, COUNTRY", '
+                        '"title": "...", "body": ["para1", "para2"]} ]\n'
+                        "}\n\n"
+                        "Rules:\n"
+                        "- LEAD = the single most significant or interesting AI development today; "
+                        "give it 3 solid paragraphs explaining what it is, how it works, and why "
+                        "it matters globally.\n"
+                        "- MARVEL = genuinely useful / impressive / hopeful uses; each 2 paragraphs.\n"
+                        "- PANIC = worrying / risky / cautionary developments; each 2 paragraphs.\n"
+                        "- Each paragraph 2-4 sentences, specific and informative.\n"
+                        "- region is a short dateline like 'Shenzhen, China' or 'Seoul, South Korea'.\n"
+                        "- source_index is the headline number the entry is based on.\n"
+                        "- Cover at least 4 different countries across the whole dispatch.\n\n"
                         f"Headlines:\n{numbered}\n\n"
-                        'Return ONLY a JSON object: {"marvel": [...], "panic": [...]}.'
+                        "Return ONLY the JSON object."
                     ),
                 },
             ],
-            temperature=0.7,
-            max_tokens=2200,
+            temperature=0.65,
+            max_tokens=4000,
         )
         content = resp.choices[0].message.content.strip()
         content = re.sub(r"^```[\w]*\n?", "", content).strip()
@@ -155,74 +162,69 @@ def groq_split_stories(items: list[dict]) -> dict:
         match = re.search(r"\{.*\}", content, re.DOTALL)
         if match:
             data = json.loads(match.group(0))
-            return {
-                "marvel": (data.get("marvel") or [])[:4],
-                "panic":  (data.get("panic") or [])[:4],
-            }
+            data["marvel"] = (data.get("marvel") or [])[:4]
+            data["panic"]  = (data.get("panic") or [])[:4]
+            return data
     except Exception as e:
-        logger.error("Groq split_stories failed: %s", e)
-    return {"marvel": [], "panic": []}
+        logger.error("Groq brief failed: %s", e)
+    return {}
 
-def attach_links(stories: list[dict], items: list[dict]) -> list[dict]:
-    """Map each story's source_index back to the real article link + source name."""
-    for s in stories:
-        try:
-            idx = int(s.get("source_index", 0)) - 1
-            if 0 <= idx < len(items):
-                s["link"] = items[idx].get("link", "")
-                s["source"] = items[idx].get("source", "")
-        except (ValueError, TypeError):
-            s["link"] = ""
-            s["source"] = ""
-    return stories
-
-# ── pollinations images (free, no key) ──────────────────────────────────────────
-def pollinations_url(prompt: str, side: str, width: int, height: int) -> str:
-    """Build a Pollinations.ai image URL — generated on demand, no API key needed."""
-    style = MARVEL_STYLE if side == "marvel" else PANIC_STYLE
-    full = f"{prompt}, {style}"
-    seed = int(hashlib.md5(full.encode()).hexdigest()[:8], 16) % 100000
-    encoded = urllib.parse.quote(full, safe="")
-    return (
-        f"https://image.pollinations.ai/prompt/{encoded}"
-        f"?width={width}&height={height}&nologo=true&seed={seed}"
-    )
+def attach_link(entry: dict, items: list[dict]) -> dict:
+    """Map a single entry's source_index back to the real article link + source."""
+    try:
+        idx = int(entry.get("source_index", 0)) - 1
+        if 0 <= idx < len(items):
+            entry["link"] = items[idx].get("link", "")
+            entry["source"] = items[idx].get("source", "")
+    except (ValueError, TypeError):
+        pass
+    entry.setdefault("link", "")
+    entry.setdefault("source", "")
+    return entry
 
 # ── html builder ────────────────────────────────────────────────────────────────
-def _card(s: dict, side: str) -> str:
-    title = s.get("title", "Untitled")
-    summary = s.get("summary", "")
-    link = s.get("link", "")
-    source = s.get("source", "")
-    title_escaped = title.replace('"', "&quot;")
-    if SKIP_IMAGES:
-        img = f'<div class="card-img-placeholder">{title_escaped}</div>'
-    else:
-        url = pollinations_url(s.get("image_prompt", title), side, 700, 440)
-        img = f'<img class="card-img" src="{url}" alt="{title_escaped}" loading="lazy">'
-    src_line = ""
-    if link:
-        label = source or "Read the story"
-        src_line = f'<a class="card-source" href="{link}" target="_blank" rel="noopener">{label} ↗</a>'
+def _paras(body) -> str:
+    if isinstance(body, str):
+        body = [body]
+    return "".join(f"<p>{p}</p>" for p in (body or []) if p)
+
+def _source(entry: dict) -> str:
+    link = entry.get("link", "")
+    if not link:
+        return ""
+    label = entry.get("source") or "Read the source"
+    return f'<a class="src" href="{link}" target="_blank" rel="noopener">{label} ↗</a>'
+
+def _entry(e: dict) -> str:
+    region = (e.get("region") or "").upper()
     return f"""
-      <article class="card">
-        <div class="card-img-wrap">{img}</div>
-        <div class="card-body">
-          <h3 class="card-title">{title}</h3>
-          <p class="card-summary">{summary}</p>
-          {src_line}
+      <article class="entry">
+        <div class="dateline">{region}</div>
+        <div class="entry-main">
+          <h3 class="entry-title">{e.get('title','')}</h3>
+          <div class="entry-body">{_paras(e.get('body'))}</div>
+          {_source(e)}
         </div>
       </article>"""
 
 def build_html(data: dict, date_str: str) -> str:
+    lead = data.get("lead") or {}
     marvel = data.get("marvel") or []
     panic  = data.get("panic") or []
-    if not marvel and not panic:
-        marvel = [{"title": "A quiet day in the machine", "summary": "No fresh AI stories surfaced today. Check back tomorrow — the robots never rest for long.", "image_prompt": "a calm empty futuristic control room", "link": "", "source": ""}]
-
-    marvel_cards = "".join(_card(s, "marvel") for s in marvel)
-    panic_cards  = "".join(_card(s, "panic") for s in panic)
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    lead_html = ""
+    if lead:
+        lead_html = f"""
+  <section class="lead">
+    <div class="dateline lead-dateline">{(lead.get('region') or '').upper()}</div>
+    <h2 class="lead-title">{lead.get('title','')}</h2>
+    <div class="lead-body">{_paras(lead.get('body'))}</div>
+    {_source(lead)}
+  </section>"""
+
+    marvel_html = "".join(_entry(e) for e in marvel) or '<p class="empty">No marvels surfaced today.</p>'
+    panic_html  = "".join(_entry(e) for e in panic)  or '<p class="empty">No panics surfaced today.</p>'
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -230,139 +232,113 @@ def build_html(data: dict, date_str: str) -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI World — The Marvel &amp; The Panic — {date_str}</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root {{
-    --bg: #0a0a0f;
-    --panel: #13131c;
-    --text: #e8e8f0;
-    --dim: #9a9ab0;
-    --marvel: #36e0c8;
-    --marvel-2: #ffcf5c;
-    --panic: #ff4d5e;
-    --panic-2: #ff8a3d;
-    --border: #23232f;
+    --paper: #f4f1ea;
+    --ink: #1b1a17;
+    --ink-soft: #4a4740;
+    --rule: #cbc6ba;
+    --marvel: #0a7d6b;
+    --panic: #b22222;
+    --link: #8a5a00;
   }}
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
-    background: radial-gradient(ellipse at top, #14141f 0%, var(--bg) 60%);
-    color: var(--text);
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    line-height: 1.6;
-    max-width: 1180px;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 18px;
+    line-height: 1.62;
+    max-width: 940px;
     margin: 0 auto;
-    padding: 0 24px 80px;
+    padding: 0 26px 90px;
   }}
-  .masthead {{
-    text-align: center;
-    padding: 56px 0 28px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 40px;
-  }}
+  /* ── MASTHEAD ── */
+  .masthead {{ text-align: center; padding: 52px 0 22px; border-bottom: 3px double var(--ink); }}
   .eyebrow {{
-    font-size: 12px;
-    letter-spacing: 0.35em;
-    text-transform: uppercase;
-    color: var(--dim);
-    margin-bottom: 14px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--ink-soft); margin-bottom: 16px;
   }}
-  .masthead h1 {{
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: clamp(38px, 7vw, 76px);
-    line-height: 1.0;
-    letter-spacing: -1px;
+  .masthead h1 {{ font-family: 'Newsreader', serif; font-weight: 600; font-size: clamp(34px, 6.5vw, 62px); line-height: 1.04; letter-spacing: -0.5px; }}
+  .masthead h1 .m {{ color: var(--marvel); font-style: italic; }}
+  .masthead h1 .p {{ color: var(--panic); font-style: italic; }}
+  .masthead .date {{ font-family: 'Space Grotesk', sans-serif; font-size: 13px; letter-spacing: 0.06em; color: var(--ink-soft); margin-top: 16px; }}
+  .standfirst {{
+    max-width: 660px; margin: 22px auto 0; font-size: 18px; font-style: italic;
+    color: var(--ink-soft); line-height: 1.55;
   }}
-  .masthead h1 .m {{ color: var(--marvel); }}
-  .masthead h1 .p {{ color: var(--panic); }}
-  .masthead .date {{ color: var(--dim); margin-top: 16px; font-size: 14px; letter-spacing: 0.05em; }}
-  .section {{ margin-bottom: 64px; }}
-  .section-head {{
-    display: flex;
-    align-items: baseline;
-    gap: 16px;
-    margin-bottom: 28px;
-    padding-bottom: 12px;
-    border-bottom: 2px solid var(--border);
+  /* ── DATELINE ── */
+  .dateline {{
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-soft);
   }}
-  .section-head h2 {{
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: 30px;
-    letter-spacing: -0.5px;
+  /* ── LEAD ── */
+  .lead {{ padding: 38px 0 34px; border-bottom: 1px solid var(--rule); }}
+  .lead-dateline {{ margin-bottom: 12px; }}
+  .lead-title {{ font-weight: 600; font-size: clamp(26px, 4.6vw, 40px); line-height: 1.12; letter-spacing: -0.4px; margin-bottom: 18px; }}
+  .lead-body p {{ margin-bottom: 16px; }}
+  .lead-body p:first-of-type::first-letter {{
+    font-size: 3.4em; line-height: 0.78; float: left;
+    padding: 6px 10px 0 0; font-weight: 600; color: var(--ink);
   }}
-  .section-head .tag {{ font-size: 13px; color: var(--dim); letter-spacing: 0.04em; }}
-  .marvel .section-head h2 {{ color: var(--marvel); }}
-  .panic .section-head h2 {{ color: var(--panic); }}
-  .grid {{
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 26px;
+  /* ── SECTIONS ── */
+  .section {{ padding-top: 40px; }}
+  .section-head {{ display: flex; align-items: baseline; gap: 14px; border-bottom: 2px solid var(--ink); padding-bottom: 8px; margin-bottom: 8px; }}
+  .section-head h2 {{ font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; }}
+  .section.marvel h2 {{ color: var(--marvel); }}
+  .section.panic h2 {{ color: var(--panic); }}
+  .section-head .tag {{ font-family: 'Newsreader', serif; font-style: italic; font-size: 15px; color: var(--ink-soft); }}
+  /* ── ENTRY ── */
+  .entry {{ display: grid; grid-template-columns: 150px 1fr; gap: 24px; padding: 26px 0; border-bottom: 1px solid var(--rule); }}
+  .entry .dateline {{ padding-top: 5px; }}
+  .section.marvel .entry .dateline {{ color: var(--marvel); }}
+  .section.panic .entry .dateline {{ color: var(--panic); }}
+  .entry-title {{ font-weight: 600; font-size: 23px; line-height: 1.2; margin-bottom: 12px; }}
+  .entry-body p {{ margin-bottom: 12px; }}
+  .src {{
+    font-family: 'Space Grotesk', sans-serif; font-size: 12px; letter-spacing: 0.04em;
+    color: var(--link); text-decoration: none; display: inline-block; margin-top: 4px;
   }}
-  .card {{
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    transition: transform 0.18s ease, border-color 0.18s ease;
-  }}
-  .card:hover {{ transform: translateY(-4px); }}
-  .marvel .card:hover {{ border-color: var(--marvel); }}
-  .panic .card:hover {{ border-color: var(--panic); }}
-  .card-img-wrap {{ background: #000; line-height: 0; aspect-ratio: 7 / 4.4; }}
-  .card-img {{ width: 100%; height: 100%; object-fit: cover; display: block; }}
-  .card-img-placeholder {{
-    width: 100%; height: 100%; min-height: 180px;
-    display: flex; align-items: center; justify-content: center;
-    padding: 18px; text-align: center; color: var(--dim); font-size: 13px;
-    background: repeating-linear-gradient(45deg, #15151f 0 10px, #1b1b27 10px 20px);
-  }}
-  .card-body {{ padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 10px; flex: 1; }}
-  .card-title {{ font-family: 'Syne', sans-serif; font-weight: 700; font-size: 18px; line-height: 1.25; }}
-  .card-summary {{ color: var(--dim); font-size: 14.5px; flex: 1; }}
-  .card-source {{ font-size: 12.5px; text-decoration: none; letter-spacing: 0.03em; margin-top: 4px; }}
-  .marvel .card-source {{ color: var(--marvel-2); }}
-  .panic .card-source {{ color: var(--panic-2); }}
-  .card-source:hover {{ text-decoration: underline; }}
+  .src:hover {{ text-decoration: underline; }}
+  .empty {{ font-style: italic; color: var(--ink-soft); padding: 20px 0; }}
+  /* ── FOOTER ── */
   .footer {{
-    text-align: center; color: var(--dim); font-size: 12.5px;
-    border-top: 1px solid var(--border); padding-top: 28px; letter-spacing: 0.04em;
+    margin-top: 56px; border-top: 3px double var(--ink); padding-top: 20px;
+    font-family: 'Space Grotesk', sans-serif; font-size: 12px; letter-spacing: 0.05em;
+    color: var(--ink-soft); text-align: center;
   }}
-  .footer a {{ color: var(--dim); }}
-  @media (max-width: 560px) {{ .grid {{ grid-template-columns: 1fr; }} }}
+  .footer a {{ color: var(--ink-soft); }}
+  @media (max-width: 620px) {{
+    .entry {{ grid-template-columns: 1fr; gap: 8px; }}
+    .entry .dateline {{ padding-top: 0; }}
+  }}
 </style>
 </head>
 <body>
 
 <header class="masthead">
-  <div class="eyebrow">A Daily Look At How The World Actually Uses AI</div>
+  <div class="eyebrow">In the spirit of Tomorrow's World · A daily global dispatch on AI</div>
   <h1>The <span class="m">Marvel</span> &amp; The <span class="p">Panic</span></h1>
   <div class="date">{date_str}</div>
+  <p class="standfirst">What the world is actually doing with artificial intelligence today — how it works, who is building it, and why it matters — from Shenzhen to Seoul to Silicon Valley.</p>
 </header>
+{lead_html}
 
 <section class="section marvel">
-  <div class="section-head">
-    <h2>✦ The Marvel</h2>
-    <span class="tag">the amazing, useful & inspiring</span>
-  </div>
-  <div class="grid">{marvel_cards}</div>
+  <div class="section-head"><h2>The Marvel</h2><span class="tag">where it's going right</span></div>
+  {marvel_html}
 </section>
 
 <section class="section panic">
-  <div class="section-head">
-    <h2>⚠ The Panic</h2>
-    <span class="tag">the chaotic, risky & cautionary</span>
-  </div>
-  <div class="grid">{panic_cards}</div>
+  <div class="section-head"><h2>The Panic</h2><span class="tag">where it's going wrong</span></div>
+  {panic_html}
 </section>
 
 <footer class="footer">
-  Generated {generated} &nbsp;·&nbsp;
-  Stories curated by Groq &nbsp;·&nbsp;
-  Images by <a href="https://pollinations.ai" target="_blank" rel="noopener">Pollinations.ai</a> &nbsp;·&nbsp;
-  Headlines via Google News
+  Compiled {generated} &nbsp;·&nbsp; Curation &amp; copy by Groq (Llama 3.3) &nbsp;·&nbsp; Headlines via Google News &nbsp;·&nbsp; jonestech.xyz
 </footer>
 
 </body>
@@ -403,13 +379,13 @@ def ftp_upload(local_path: Path, remote_filename: str = "AIWorld.html"):
 # ── main ────────────────────────────────────────────────────────────────────────
 def main(dry_run: bool = False):
     date_str = datetime.now().strftime("%A %-d %B %Y")
-    logger.info("✦ Building AIWorld — %s", date_str)
+    logger.info("✦ Building AIWorld dispatch — %s", date_str)
 
     # 1. Collect headlines (with links) from all feeds
     all_items = []
     for query in NEWS_QUERIES:
         logger.info("Fetching: %s", query[:50])
-        all_items.extend(fetch_rss(query, limit=6))
+        all_items.extend(fetch_rss(query, limit=7))
 
     # Deduplicate by title
     seen, items = set(), []
@@ -420,14 +396,17 @@ def main(dry_run: bool = False):
             items.append(it)
     logger.info("Got %d unique headlines", len(items))
 
-    # 2. Groq picks + splits into marvel / panic
-    logger.info("Asking Groq to curate marvel vs panic...")
-    data = groq_split_stories(items[:50])
-    data["marvel"] = attach_links(data.get("marvel", []), items)
-    data["panic"]  = attach_links(data.get("panic", []), items)
-    logger.info("Got %d marvel + %d panic stories", len(data["marvel"]), len(data["panic"]))
+    # 2. Groq writes the dispatch
+    logger.info("Asking Groq to write the dispatch...")
+    data = groq_brief(items[:70])
+    if data.get("lead"):
+        attach_link(data["lead"], items)
+    data["marvel"] = [attach_link(e, items) for e in data.get("marvel", [])]
+    data["panic"]  = [attach_link(e, items) for e in data.get("panic", [])]
+    logger.info("Lead: %s | %d marvel | %d panic",
+                bool(data.get("lead")), len(data.get("marvel", [])), len(data.get("panic", [])))
 
-    # 3. Build HTML (Pollinations image URLs are embedded — generated on demand)
+    # 3. Build HTML
     logger.info("Building HTML...")
     html = build_html(data, date_str)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
