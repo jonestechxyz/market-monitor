@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import sys
+import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -997,7 +998,7 @@ def build_html(market: dict, news_sections: list, big_read: dict, date_str: str,
 </html>"""
 
 # ── ftp upload ─────────────────────────────────────────────────────────────────
-def ftp_upload(local_path: Path, remote_filename: str = "daily.html"):
+def ftp_upload(local_path: Path, remote_filename: str = "daily.html", attempts: int = 3):
     host = os.getenv("FTP_HOST", "")
     user = os.getenv("FTP_USER", "")
     pwd  = os.getenv("FTP_PASS", "")
@@ -1006,18 +1007,37 @@ def ftp_upload(local_path: Path, remote_filename: str = "daily.html"):
     if not all([host, user, pwd]):
         logger.warning("FTP credentials not set — skipping upload")
         return False
-    try:
-        with ftplib.FTP_TLS(host, timeout=30) as ftp:
+
+    def _store(ftp_cls, secure):
+        with ftp_cls(host, timeout=60) as ftp:
             ftp.login(user, pwd)
-            ftp.prot_p()  # switch to secure data connection
+            if secure:
+                ftp.prot_p()  # switch to secure data connection
             ftp.cwd(path)
             with open(local_path, "rb") as f:
                 ftp.storbinary(f"STOR {remote_filename}", f)
-        logger.info("✅ Uploaded to https://jonestech.xyz/%s", remote_filename)
-        return True
-    except Exception as e:
-        logger.error("FTP upload failed: %s", e)
-        return False
+
+    # Retry on transient timeouts; within each attempt, try secure FTP_TLS
+    # first and fall back to plain FTP (mirrors aiworld.py's resilience).
+    for attempt in range(1, attempts + 1):
+        try:
+            _store(ftplib.FTP_TLS, secure=True)
+            logger.info("✅ Uploaded to https://jonestech.xyz/%s", remote_filename)
+            return True
+        except Exception as e:
+            logger.warning("FTP_TLS attempt %d/%d failed (%s), trying plain FTP...",
+                           attempt, attempts, e)
+            try:
+                _store(ftplib.FTP, secure=False)
+                logger.info("✅ Uploaded via plain FTP to https://jonestech.xyz/%s", remote_filename)
+                return True
+            except Exception as e2:
+                logger.warning("Plain FTP attempt %d/%d failed: %s", attempt, attempts, e2)
+                if attempt < attempts:
+                    time.sleep(5 * attempt)  # linear backoff before retrying
+
+    logger.error("FTP upload failed after %d attempts — site not updated", attempts)
+    return False
 
 # ── pushover ───────────────────────────────────────────────────────────────────
 def send_pushover(title: str, message: str):
