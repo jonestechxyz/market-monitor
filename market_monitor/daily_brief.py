@@ -396,7 +396,7 @@ def build_html(market: dict, news_sections: list, big_read: dict, date_str: str,
           {'▲' if d.get('pct_change',0)>=0 else '▼'}{abs(d.get('pct_change',0)):.1f}%
         </td>
         <td class="price">{d.get('close',0):.2f}</td>
-      </tr>""" for sym, d in list(market["eu_data"].items())[:15])
+      </tr>""" for sym, d in list(market["eu_data"].items())[:20])
 
     ap_items_html = ""
     if ap_section and ap_section.get("items"):
@@ -434,7 +434,7 @@ def build_html(market: dict, news_sections: list, big_read: dict, date_str: str,
         {market_take_html}
       </div>
       <div class="sidebar-card">
-        <div class="sidebar-label">📊 Your Watchlist</div>
+        <div class="sidebar-label">🌐 Global Tech</div>
         <table class="sidebar-watchlist">
           <tbody>{sidebar_watchlist}</tbody>
         </table>

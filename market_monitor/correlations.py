@@ -1,50 +1,39 @@
 """
-Hardcoded correlation map: Asian mover → EU stocks likely to react at open.
-Includes DAX components and selected FTSE 100 names.
+Global tech watchlist for the daily brief.
+
+NOTE: This module also still defines the legacy Asian-mover → EU-stock
+CORRELATION_RULES below. Those rules are German/DAX-specific and are no
+longer surfaced in the live daily_brief.py output (the brief renders the
+watchlist only), so they're left dormant rather than rewritten for the
+global tech universe.
 """
 
 # ---------------------------------------------------------------------------
-# Watchlist: EU stocks with known Asian sensitivity
+# Watchlist: global tech names shown in the daily brief
 # ---------------------------------------------------------------------------
 
+# Global tech watchlist — US megacap technology names.
+# (Kept the EU_WATCHLIST symbol name for backward-compat with the legacy
+#  main.py/formatter.py pipeline; the live daily_brief.py only needs the
+#  dict contents + get_all_watchlist_symbols().)
 EU_WATCHLIST: dict[str, str] = {
-    # DAX components
-    "SAP.DE":  "SAP SE",
-    "SIE.DE":  "Siemens AG",
-    "BMW.DE":  "BMW AG",
-    "MBG.DE":  "Mercedes-Benz Group",
-    "VOW3.DE": "Volkswagen AG",
-    "ALV.DE":  "Allianz SE",
-    "MUV2.DE": "Munich Re",
-    "DBK.DE":  "Deutsche Bank",
-    "IFX.DE":  "Infineon Technologies",
-    "BAS.DE":  "BASF SE",
-    "BAYN.DE": "Bayer AG",
-    "HEN3.DE": "Henkel AG",
-    "ADS.DE":  "Adidas AG",
-    "AIR.DE":  "Airbus SE",
-    "DHL.DE":  "DHL Group",
-    # FTSE 100 selections
-    "HSBA.L":  "HSBC Holdings",
-    "STAN.L":  "Standard Chartered",
-    "PRU.L":   "Prudential PLC",
-    "BP.L":    "BP PLC",
-    "SHEL.L":  "Shell PLC",
-    "RIO.L":   "Rio Tinto",
-    "AAL.L":   "Anglo American",
-    "GLEN.L":  "Glencore",
-    "BHP.L":   "BHP Group",
-    "AZN.L":   "AstraZeneca",
-    # EU Tech — semiconductor & hardware
-    "ASML.AS": "ASML Holding",
-    "STM":  "STMicroelectronics",
-    "BESI.AS": "BE Semiconductor (BESI)",
-    # EU Tech — software & IT services
-    "CAP.PA":  "Capgemini",
-    "DSY.PA":  "Dassault Systèmes",
-    # EU Tech — telecom infrastructure
-    "NOKIA.HE": "Nokia",
-    "ERIC-B.ST": "Ericsson",
+    # US megacap tech
+    "AAPL":  "Apple",
+    "MSFT":  "Microsoft",
+    "NVDA":  "Nvidia",
+    "GOOGL": "Alphabet (Google)",
+    "AMZN":  "Amazon",
+    "META":  "Meta Platforms",
+    "TSLA":  "Tesla",
+    "AVGO":  "Broadcom",
+    "AMD":   "AMD",
+    "ORCL":  "Oracle",
+    "CRM":   "Salesforce",
+    "ADBE":  "Adobe",
+    "NFLX":  "Netflix",
+    "QCOM":  "Qualcomm",
+    "CSCO":  "Cisco",
+    "INTC":  "Intel",
 }
 
 # ---------------------------------------------------------------------------
