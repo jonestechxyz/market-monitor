@@ -10,7 +10,6 @@ AiArt Daily Gallery — Life in 2050 edition.
 import argparse
 import base64
 import ftplib
-import io
 import json
 import logging
 import os
@@ -20,7 +19,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
-from huggingface_hub import InferenceClient
 from openai import OpenAI
 
 _env = Path(__file__).parent / ".env"
@@ -33,11 +31,13 @@ if _env.exists():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
-HF_TOKEN       = os.getenv("HF_TOKEN", "")
-HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
-OUTPUT_PATH    = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
+GROQ_API_KEY  = os.getenv("GROQ_API_KEY", "")
+CF_ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID", "")
+CF_API_TOKEN  = os.getenv("CF_API_TOKEN", "")
+OUTPUT_PATH   = Path(os.getenv("OUTPUT_PATH", "/tmp/AiArt.html"))
 groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
+
+CF_IMAGE_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/black-forest-labs/flux-1-schnell"
 
 THEME_CANDIDATES = [
     # 2050 Utopia
@@ -137,28 +137,28 @@ Return ONLY this JSON:
 
 
 def generate_image_b64(prompt: str, width: int = 896, height: int = 512) -> str:
-    """Generate image via HF FLUX.1-schnell, return base64 data URI."""
-    if not HF_TOKEN:
-        logger.warning("HF_TOKEN not set — skipping image")
+    """Generate image via Cloudflare Workers AI FLUX.1-schnell, return base64 data URI."""
+    if not CF_ACCOUNT_ID or not CF_API_TOKEN:
+        logger.warning("CF_ACCOUNT_ID/CF_API_TOKEN not set — skipping image")
         return ""
-    try:
-        client = InferenceClient(token=HF_TOKEN)
-        for attempt in range(3):
-            try:
-                image = client.text_to_image(prompt, model=HF_IMAGE_MODEL, width=width, height=height)
-                buf = io.BytesIO()
-                image.save(buf, format="JPEG", quality=85)
-                b64 = base64.b64encode(buf.getvalue()).decode()
-                return f"data:image/jpeg;base64,{b64}"
-            except Exception as e:
-                if "429" in str(e) and attempt < 2:
-                    wait = 30 * (attempt + 1)
-                    logger.warning("Rate limited — waiting %ds", wait)
-                    time.sleep(wait)
-                else:
-                    raise
-    except Exception as e:
-        logger.error("HF image error: %s", e)
+    url = CF_IMAGE_URL.format(account_id=CF_ACCOUNT_ID)
+    headers = {"Authorization": f"Bearer {CF_API_TOKEN}"}
+    payload = {"prompt": prompt, "num_steps": 4, "width": width, "height": height}
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=60)
+            if resp.status_code == 429 and attempt < 2:
+                wait = 30 * (attempt + 1)
+                logger.warning("CF rate limited — waiting %ds", wait)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            b64 = base64.b64encode(resp.content).decode()
+            return f"data:image/png;base64,{b64}"
+        except Exception as e:
+            logger.error("CF image error (attempt %d): %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(10)
     return ""
 
 

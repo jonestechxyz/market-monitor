@@ -23,9 +23,10 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
+import base64
+import io
 import requests
 from openai import OpenAI
-from huggingface_hub import InferenceClient
 
 # ── load .env ──────────────────────────────────────────────────────────────────
 _env = Path(__file__).parent / ".env"
@@ -38,13 +39,13 @@ if _env.exists():
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY  = os.getenv("GROQ_API_KEY", "")
-HF_TOKEN      = os.getenv("HF_TOKEN", "")
-SKIP_IMAGES   = os.getenv("SKIP_IMAGES", "").lower() in ("1", "true", "yes")
-OUTPUT_PATH   = Path(os.getenv("OUTPUT_PATH", "/tmp/MadWorld.html"))
-RSS_BASE     = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "")
+CF_ACCOUNT_ID   = os.getenv("CF_ACCOUNT_ID", "")
+CF_API_TOKEN    = os.getenv("CF_API_TOKEN", "")
+OUTPUT_PATH     = Path(os.getenv("OUTPUT_PATH", "/tmp/MadWorld.html"))
+RSS_BASE        = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
 
-HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
+CF_IMAGE_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/black-forest-labs/flux-1-schnell"
 
 MAD_STYLE = (
     "gap-toothed big-eared freckle-faced goofy-grinning boy mascot, "
@@ -146,38 +147,31 @@ def groq_pick_stories(headlines: list[str]) -> list[dict]:
         logger.error("Groq pick_stories failed: %s", e)
     return []
 
-# ── hugging face image generation ─────────────────────────────────────────────
-def generate_image_b64(scene_prompt: str, width: int = 800, height: int = 512) -> str:
-    """Generate image via HF InferenceClient, return base64 data URI or empty string."""
-    if not HF_TOKEN:
-        logger.warning("HF_TOKEN not set — skipping image generation")
+# ── cloudflare workers ai image generation ────────────────────────────────────
+def generate_image_b64(scene_prompt: str, width: int = 832, height: int = 512) -> str:
+    """Generate image via Cloudflare Workers AI FLUX.1-schnell, return base64 data URI."""
+    if not CF_ACCOUNT_ID or not CF_API_TOKEN:
+        logger.warning("CF_ACCOUNT_ID/CF_API_TOKEN not set — skipping image generation")
         return ""
     full_prompt = f"{MAD_STYLE}, {scene_prompt}"
-    try:
-        import base64, io
-        client = InferenceClient(token=HF_TOKEN)
-        for attempt in range(3):
-            try:
-                image = client.text_to_image(
-                    full_prompt,
-                    model=HF_IMAGE_MODEL,
-                    width=width,
-                    height=height,
-                )
-                buf = io.BytesIO()
-                image.save(buf, format="JPEG", quality=85)
-                b64 = base64.b64encode(buf.getvalue()).decode()
-                return f"data:image/jpeg;base64,{b64}"
-            except Exception as e:
-                msg = str(e)
-                if "429" in msg and attempt < 2:
-                    wait = 30 * (attempt + 1)
-                    logger.warning("HF rate limited, waiting %ds (attempt %d)...", wait, attempt + 1)
-                    time.sleep(wait)
-                else:
-                    raise
-    except Exception as e:
-        logger.error("HF image error: %s", e)
+    url = CF_IMAGE_URL.format(account_id=CF_ACCOUNT_ID)
+    headers = {"Authorization": f"Bearer {CF_API_TOKEN}"}
+    payload = {"prompt": full_prompt, "num_steps": 4, "width": width, "height": height}
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=60)
+            if resp.status_code == 429 and attempt < 2:
+                wait = 30 * (attempt + 1)
+                logger.warning("CF rate limited, waiting %ds...", wait)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            b64 = base64.b64encode(resp.content).decode()
+            return f"data:image/png;base64,{b64}"
+        except Exception as e:
+            logger.error("CF image error (attempt %d): %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(10)
     return ""
 
 # ── html builder ───────────────────────────────────────────────────────────────
@@ -623,20 +617,16 @@ def main(dry_run: bool = False):
     stories = groq_pick_stories(unique[:40])
     logger.info("Got %d stories from Groq", len(stories))
 
-    # 3. Generate images via HF Inference API
-    if SKIP_IMAGES:
-        logger.info("SKIP_IMAGES=true — skipping image generation (test mode)")
-        for story in stories:
-            story["image_data"] = ""
-    elif HF_TOKEN:
-        logger.info("Generating %d images via Hugging Face...", len(stories))
+    # 3. Generate images via Cloudflare Workers AI
+    if CF_ACCOUNT_ID and CF_API_TOKEN:
+        logger.info("Generating %d images via Cloudflare Workers AI...", len(stories))
         for i, story in enumerate(stories):
-            w, h = (1200, 700) if i == 0 else (600, 400)
+            w, h = (1024, 576) if i == 0 else (768, 512)
             logger.info("  Image %d/%d: %s", i + 1, len(stories), story.get("image_prompt", "")[:60])
             story["image_data"] = generate_image_b64(story.get("image_prompt", "satirical cartoon"), width=w, height=h)
-            time.sleep(2)  # be polite to the free tier
+            time.sleep(2)
     else:
-        logger.warning("HF_TOKEN not set — pages will render without images. Add HF_TOKEN secret.")
+        logger.warning("CF_ACCOUNT_ID/CF_API_TOKEN not set — pages will render without images.")
         for story in stories:
             story["image_data"] = ""
 
