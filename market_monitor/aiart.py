@@ -153,7 +153,8 @@ def generate_image_b64(prompt: str, width: int = 896, height: int = 512) -> str:
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
-            b64 = base64.b64encode(resp.content).decode()
+            data = resp.json()
+            b64 = data["result"]["image"]
             return f"data:image/png;base64,{b64}"
         except Exception as e:
             logger.error("CF image error (attempt %d): %s", attempt + 1, e)
