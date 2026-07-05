@@ -278,6 +278,94 @@ def groq_big_read(all_headlines: list[str]) -> dict:
         logger.error("Groq big read failed: %s", e)
         return {"title": "Markets in Motion", "standfirst": "", "body": ""}
 
+AI_TECH_WATCHLIST = [
+    {"sym": "TSM",   "name": "TSMC",           "asia_link": "Taiwan Semiconductor Index — direct proxy"},
+    {"sym": "NVDA",  "name": "Nvidia",          "asia_link": "TSMC-fabbed; tracks Taiwan semi + Nikkei tech"},
+    {"sym": "AMD",   "name": "AMD",             "asia_link": "TSMC-fabbed; Taiwan exposure"},
+    {"sym": "AVGO",  "name": "Broadcom",        "asia_link": "Asia semiconductor supply chain"},
+    {"sym": "ARM",   "name": "Arm Holdings",    "asia_link": "SoftBank-owned; Nikkei correlated"},
+    {"sym": "SMCI",  "name": "Super Micro",     "asia_link": "Taiwan/Japan server supply chain"},
+    {"sym": "MRVL",  "name": "Marvell Tech",    "asia_link": "TSMC + Samsung fab dependent"},
+    {"sym": "QCOM",  "name": "Qualcomm",        "asia_link": "Samsung fab + Asia mobile market"},
+    {"sym": "MSFT",  "name": "Microsoft",       "asia_link": "Azure Asia-Pacific growth"},
+    {"sym": "GOOGL", "name": "Alphabet",        "asia_link": "Asia ad revenue + TPU supply chain"},
+    {"sym": "META",  "name": "Meta",            "asia_link": "Asia hardware + Reality Labs supply"},
+    {"sym": "PLTR",  "name": "Palantir",        "asia_link": "AI gov contracts — sentiment play"},
+]
+
+def groq_ai_correlation(asian_movers: list) -> dict:
+    """Generate AI stock signals based on Asian market movements. Returns JSON-serialisable dict."""
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    if not asian_movers:
+        return {
+            "generated_at": now_utc,
+            "asian_summary": "No significant Asian movers overnight.",
+            "stocks": []
+        }
+
+    mover_str = "; ".join(
+        f"{m.get('name','?')} ({m.get('pct_change',0):+.1f}%, vol ×{m.get('volume_ratio',1):.1f})"
+        for m in asian_movers[:8]
+    )
+
+    stock_list = "\n".join(
+        f"- {s['sym']} ({s['name']}): {s['asia_link']}"
+        for s in AI_TECH_WATCHLIST
+    )
+
+    try:
+        resp = groq.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": (
+                    "You are a professional equity analyst specialising in AI/semiconductor stocks. "
+                    "Be specific, direct, and actionable. No fluff. Never say 'it's important to note' or similar."
+                )},
+                {"role": "user", "content": f"""Asian markets just closed with these moves:
+{mover_str}
+
+For each of the following AI/tech stocks, give a signal and analysis based on today's Asian session:
+{stock_list}
+
+Return a JSON object with this exact structure (no markdown, no code fences):
+{{
+  "asian_summary": "1 sentence summary of what Asian markets did and what it means for US tech open",
+  "stocks": [
+    {{
+      "sym": "NVDA",
+      "signal": "bullish" | "bearish" | "neutral",
+      "confidence": "high" | "medium" | "low",
+      "asia_driver": "which Asian index/event is moving this stock today",
+      "analysis": "2 sentences: what the Asian move means for this stock at US open and why",
+      "watch": "1 specific price level or condition to watch today"
+    }}
+  ]
+}}
+
+Cover all {len(AI_TECH_WATCHLIST)} stocks. Return ONLY the JSON object."""}
+            ],
+            temperature=0.4,
+            max_tokens=1800,
+        )
+        content = resp.choices[0].message.content.strip()
+        content = re.sub(r"^```[\w]*\n?", "", content).strip()
+        content = re.sub(r"\n?```$", "", content).strip()
+        data = json.loads(content)
+        data["generated_at"] = now_utc
+        return data
+    except Exception as e:
+        logger.error("AI correlation Groq call failed: %s", e)
+        return {
+            "generated_at": now_utc,
+            "asian_summary": mover_str,
+            "stocks": [{"sym": s["sym"], "name": s["name"], "signal": "neutral",
+                        "confidence": "low", "asia_driver": s["asia_link"],
+                        "analysis": "Analysis unavailable.", "watch": "—"}
+                       for s in AI_TECH_WATCHLIST]
+        }
+
+
 def groq_market_take(movers: list) -> str:
     if not movers:
         return "Markets quiet overnight."
@@ -1084,7 +1172,14 @@ def main(dry_run: bool = False):
         item["take"] = ap_takes[i] if i < len(ap_takes) else ""
     ap_section = {**ASIA_PACIFIC_FEED, "items": ap_items}
 
-    # 4. One Big Read
+    # 4. AI correlation JSON for dashboard
+    logger.info("Generating AI correlation analysis...")
+    ai_corr = groq_ai_correlation(market["asian_movers"])
+    ai_corr_path = OUTPUT_PATH.parent / "ai_correlation.json"
+    ai_corr_path.write_text(json.dumps(ai_corr, indent=2), encoding="utf-8")
+    logger.info("✅ AI correlation JSON saved")
+
+    # 4b. One Big Read
     logger.info("Writing One Big Read...")
     big_read = groq_big_read(all_headlines)
 
@@ -1103,6 +1198,7 @@ def main(dry_run: bool = False):
     # 6. FTP upload to website
     logger.info("Uploading to jonestech.xyz...")
     ftp_upload(OUTPUT_PATH)
+    ftp_upload(ai_corr_path, remote_filename="ai_correlation.json")
 
     # 7. Email — send full HTML
     gmail_user = os.getenv("GMAIL_USER", "")

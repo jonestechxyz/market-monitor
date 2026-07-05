@@ -293,6 +293,65 @@
       border-top: 1px solid var(--border);
     }
 
+    /* ── AI Tech stocks grid ─────────────────────────────────────── */
+    .ai-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+    }
+
+    .ai-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ai-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--border);
+      transition: background 0.3s;
+    }
+
+    .ai-card.up::before   { background: var(--green); }
+    .ai-card.down::before { background: var(--red); }
+
+    .ai-sym  { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .ai-name { font-size: 14px; font-weight: 600; margin: 2px 0 6px; }
+
+    .ai-row  { display: flex; align-items: baseline; gap: 8px; }
+    .ai-price { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+    .ai-pct  { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+    .up   .ai-pct { color: var(--green); }
+    .down .ai-pct { color: var(--red); }
+
+    .ai-asia { font-size: 10px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+    .ai-loading .ai-price { color: var(--muted); }
+
+    /* ── AI analysis overlay ── */
+    .ai-signal { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 2px 7px; border-radius: 4px; margin-top: 6px; display: inline-block; }
+    .ai-signal.bullish { background: rgba(34,197,94,0.15); color: var(--green); }
+    .ai-signal.bearish { background: rgba(239,68,68,0.15);  color: var(--red); }
+    .ai-signal.neutral { background: rgba(100,116,139,0.2); color: var(--muted); }
+    .ai-confidence { font-size: 9px; color: var(--muted); margin-left: 4px; }
+    .ai-analysis-text { font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+    .ai-watch { font-size: 10px; color: #f59e0b; margin-top: 4px; line-height: 1.4; }
+    .ai-driver { font-size: 10px; color: var(--muted); margin-top: 3px; font-style: italic; }
+
+    .asian-summary-bar {
+      background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.25);
+      border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;
+      font-size: 13px; color: #93c5fd; line-height: 1.5;
+    }
+    .asian-summary-bar strong { color: #fff; }
+
     /* ── Responsive ───────────────────────────────────────────────── */
     @media (max-width: 640px) {
       header { flex-direction: column; align-items: flex-start; gap: 6px; }
@@ -315,7 +374,20 @@
   <div id="content"></div>
 </main>
 
-<footer>Indicative only — not financial advice &nbsp;|&nbsp; Data via yfinance</footer>
+<!-- AI Tech Stocks live section -->
+<div style="max-width:1280px;margin:0 auto;padding:0 24px 32px;">
+  <div class="card" id="ai-tech-card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>AI &amp; Chip Stocks — Live · Asia Correlation</span>
+      <span id="ai-updated" style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">loading…</span>
+    </div>
+    <div class="ai-grid" id="ai-grid">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</div>
+
+<footer>Indicative only — not financial advice &nbsp;|&nbsp; Data via yfinance &amp; Yahoo Finance</footer>
 
 <script>
 (function () {
@@ -634,6 +706,123 @@
 
   // ── Go ─────────────────────────────────────────────────────────────────────
   boot();
+})();
+
+// ── AI Tech Stocks — live prices + Groq morning analysis ──────────────────
+(function () {
+  const AI_STOCKS = [
+    { sym: 'TSM',   name: 'TSMC'          },
+    { sym: 'NVDA',  name: 'Nvidia'        },
+    { sym: 'AMD',   name: 'AMD'           },
+    { sym: 'AVGO',  name: 'Broadcom'      },
+    { sym: 'ARM',   name: 'Arm Holdings'  },
+    { sym: 'SMCI',  name: 'Super Micro'   },
+    { sym: 'MRVL',  name: 'Marvell Tech'  },
+    { sym: 'QCOM',  name: 'Qualcomm'      },
+    { sym: 'MSFT',  name: 'Microsoft'     },
+    { sym: 'GOOGL', name: 'Alphabet'      },
+    { sym: 'META',  name: 'Meta'          },
+    { sym: 'PLTR',  name: 'Palantir'      },
+  ];
+
+  const grid    = document.getElementById('ai-grid');
+  const updated = document.getElementById('ai-updated');
+  let corrData  = {};   // sym → {signal, confidence, analysis, watch, asia_driver}
+
+  // Render skeletons immediately
+  grid.innerHTML = AI_STOCKS.map(s => `
+    <div class="ai-card ai-loading" id="ai-${s.sym}">
+      <div class="ai-sym">${s.sym}</div>
+      <div class="ai-name">${s.name}</div>
+      <div class="ai-row">
+        <span class="ai-price">—</span>
+        <span class="ai-pct">…</span>
+      </div>
+      <div class="ai-driver" id="ai-driver-${s.sym}">loading analysis…</div>
+      <div id="ai-analysis-${s.sym}"></div>
+    </div>`).join('');
+
+  // 1. Fetch morning Groq correlation JSON (generated at 6am by daily_brief.py)
+  async function fetchCorrelation() {
+    try {
+      const res = await fetch('/ai_correlation.json?_=' + Date.now());
+      if (!res.ok) throw new Error('no file');
+      const json = await res.json();
+
+      // Show Asian summary bar
+      if (json.asian_summary) {
+        const bar = document.createElement('div');
+        bar.className = 'asian-summary-bar';
+        bar.innerHTML = `<strong>🌏 Asia this morning:</strong> ${json.asian_summary}`;
+        document.getElementById('ai-tech-card').insertBefore(bar, grid);
+      }
+
+      // Index by symbol
+      (json.stocks || []).forEach(s => { corrData[s.sym] = s; });
+
+      // Update cards with analysis
+      Object.entries(corrData).forEach(([sym, d]) => {
+        const driverEl   = document.getElementById('ai-driver-' + sym);
+        const analysisEl = document.getElementById('ai-analysis-' + sym);
+        if (driverEl)   driverEl.textContent = d.asia_driver || '';
+        if (analysisEl) analysisEl.innerHTML = `
+          <span class="ai-signal ${d.signal}">${d.signal}</span>
+          <span class="ai-confidence">${d.confidence} confidence</span>
+          <div class="ai-analysis-text">${d.analysis || ''}</div>
+          ${d.watch ? `<div class="ai-watch">👁 ${d.watch}</div>` : ''}`;
+      });
+
+      if (json.generated_at) {
+        updated.textContent = `Analysis from ${json.generated_at} · prices update every 60s`;
+      }
+    } catch (e) {
+      // No JSON yet (first run, or weekend) — show fallback Asia link text
+      const ASIA_FALLBACK = {
+        TSM:'🇹🇼 Taiwan market — direct proxy', NVDA:'🔗 TSMC-fabbed; tracks Taiwan semi',
+        AMD:'🔗 TSMC-fabbed; Taiwan exposure', AVGO:'🔗 Asia semiconductor supply chain',
+        ARM:'🇯🇵 SoftBank owned; Nikkei linked', SMCI:'🇯🇵🇹🇼 Taiwan/Japan server supply',
+        MRVL:'🔗 TSMC + Samsung fab', QCOM:'🇰🇷 Samsung fab + Asia mobile',
+        MSFT:'🌏 Azure Asia-Pacific growth', GOOGL:'🌏 Asia ad revenue + TPU supply',
+        META:'🌏 Asia hardware supply chain', PLTR:'📊 AI contracts — sentiment play',
+      };
+      AI_STOCKS.forEach(s => {
+        const el = document.getElementById('ai-driver-' + s.sym);
+        if (el) el.textContent = ASIA_FALLBACK[s.sym] || '';
+      });
+    }
+  }
+
+  // 2. Fetch live prices every 60s
+  async function fetchPrices() {
+    try {
+      const syms  = AI_STOCKS.map(s => s.sym).join(',');
+      const yfUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${syms}&fields=symbol,regularMarketPrice,regularMarketChange,regularMarketChangePercent`;
+      const res   = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yfUrl)}`);
+      const wrap  = await res.json();
+      const data  = JSON.parse(wrap.contents);
+      const quotes = data?.quoteResponse?.result || [];
+
+      quotes.forEach(q => {
+        const card = document.getElementById('ai-' + q.symbol);
+        if (!card) return;
+        const price = q.regularMarketPrice?.toFixed(2) ?? '—';
+        const chg   = q.regularMarketChange ?? 0;
+        const pct   = q.regularMarketChangePercent ?? 0;
+        const dir   = chg >= 0 ? 'up' : 'down';
+        const arrow = chg >= 0 ? '▲' : '▼';
+        card.classList.remove('ai-loading', 'up', 'down');
+        card.classList.add(dir);
+        card.querySelector('.ai-price').textContent = `$${price}`;
+        card.querySelector('.ai-pct').textContent   = `${arrow} ${Math.abs(pct).toFixed(2)}%`;
+      });
+    } catch (e) {
+      // silent — prices show stale until next tick
+    }
+    setTimeout(fetchPrices, 60000);
+  }
+
+  fetchCorrelation();
+  fetchPrices();
 })();
 </script>
 </body>
