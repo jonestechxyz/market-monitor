@@ -134,15 +134,39 @@ def groq_pick_stories(headlines: list[str]) -> list[dict]:
                 },
             ],
             temperature=0.8,
-            max_tokens=1800,
+            max_tokens=2400,
         )
         content = resp.choices[0].message.content.strip()
         content = re.sub(r"^```[\w]*\n?", "", content).strip()
         content = re.sub(r"\n?```$", "", content).strip()
         match = re.search(r'\[.*\]', content, re.DOTALL)
         if match:
-            stories = json.loads(match.group(0))
-            return stories[:6]
+            try:
+                stories = json.loads(match.group(0))
+                return stories[:6]
+            except json.JSONDecodeError:
+                # Truncated — retry with smaller output request
+                logger.warning("Groq JSON parse failed, retrying with tighter prompt...")
+                resp2 = groq.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": "Return ONLY valid compact JSON. No prose. No markdown."},
+                        {"role": "user", "content": (
+                            f"From these headlines pick the 3 most satirically worthy. "
+                            f"Return a JSON array of 3 objects with keys headline, caption, image_prompt. "
+                            f"Each caption max 1 sentence. Each image_prompt max 10 words.\n\n"
+                            f"Headlines:\n{numbered}"
+                        )},
+                    ],
+                    temperature=0.7,
+                    max_tokens=800,
+                )
+                c2 = resp2.choices[0].message.content.strip()
+                c2 = re.sub(r"^```[\w]*\n?", "", c2).strip()
+                c2 = re.sub(r"\n?```$", "", c2).strip()
+                m2 = re.search(r'\[.*\]', c2, re.DOTALL)
+                if m2:
+                    return json.loads(m2.group(0))[:6]
     except Exception as e:
         logger.error("Groq pick_stories failed: %s", e)
     return []
