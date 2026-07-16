@@ -266,22 +266,54 @@ function openFull(card) {{
 </html>"""
 
 
-def ftp_upload(local_path: Path, remote_filename: str = "AiArt.html"):
+def _ftp_connect(host, user, pwd):
+    try:
+        ftp = ftplib.FTP_TLS(host, timeout=60)
+        ftp.login(user, pwd)
+        ftp.prot_p()
+        return ftp
+    except Exception:
+        ftp = ftplib.FTP(host, timeout=60)
+        ftp.login(user, pwd)
+        return ftp
+
+
+def _ftp_mkdirs(ftp, path):
+    parts = [p for p in path.split("/") if p]
+    current = ""
+    for part in parts:
+        current += "/" + part
+        try:
+            ftp.cwd(current)
+        except ftplib.error_perm:
+            ftp.mkd(current)
+            ftp.cwd(current)
+
+
+def ftp_upload(local_path: Path, remote_filename: str = "AiArt.html", archive_name: str = ""):
     host = os.getenv("FTP_HOST", "")
     user = os.getenv("FTP_USER", "")
     pwd  = os.getenv("FTP_PASS", "")
-    path = os.getenv("FTP_PATH", "/public_html/")
+    base = os.getenv("FTP_PATH", "/public_html/")
     if not all([host, user, pwd]):
         logger.warning("FTP credentials not set — skipping")
         return False
     try:
-        with ftplib.FTP_TLS(host, timeout=30) as ftp:
-            ftp.login(user, pwd)
-            ftp.prot_p()
-            ftp.cwd(path)
-            with open(local_path, "rb") as f:
-                ftp.storbinary(f"STOR {remote_filename}", f)
+        ftp = _ftp_connect(host, user, pwd)
+        ftp.cwd(base)
+        with open(local_path, "rb") as f:
+            ftp.storbinary(f"STOR {remote_filename}", f)
         logger.info("Uploaded to https://jonestech.xyz/%s", remote_filename)
+        if archive_name:
+            archive_dir = base.rstrip("/") + "/archive/aiart"
+            try:
+                _ftp_mkdirs(ftp, archive_dir)
+                with open(local_path, "rb") as f:
+                    ftp.storbinary(f"STOR {archive_name}", f)
+                logger.info("📁 Archived to https://jonestech.xyz/archive/aiart/%s", archive_name)
+            except Exception as ae:
+                logger.warning("Archive upload failed: %s", ae)
+        ftp.quit()
         return True
     except Exception as e:
         logger.error("FTP failed: %s", e)
@@ -299,7 +331,8 @@ def main(dry_run: bool = False):
     if dry_run:
         logger.info("Dry run — skipping FTP")
         return
-    ftp_upload(OUTPUT_PATH)
+    archive_name = datetime.now().strftime("AiArt-%Y-%m-%d.html")
+    ftp_upload(OUTPUT_PATH, archive_name=archive_name)
     logger.info("Done!")
 
 

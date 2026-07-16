@@ -584,36 +584,62 @@ def build_html(stories: list[dict], date_str: str) -> str:
 </html>"""
 
 # ── ftp upload ─────────────────────────────────────────────────────────────────
-def ftp_upload(local_path: Path, remote_filename: str = "MadWorld.html"):
+def _ftp_connect(host, user, pwd):
+    """Return an open FTP connection (TLS preferred, plain fallback)."""
+    try:
+        ftp = ftplib.FTP_TLS(host, timeout=60)
+        ftp.login(user, pwd)
+        ftp.prot_p()
+        return ftp
+    except Exception:
+        ftp = ftplib.FTP(host, timeout=60)
+        ftp.login(user, pwd)
+        return ftp
+
+
+def _ftp_mkdirs(ftp, path):
+    """Walk path segments, creating any missing directories."""
+    parts = [p for p in path.split("/") if p]
+    current = ""
+    for part in parts:
+        current += "/" + part
+        try:
+            ftp.cwd(current)
+        except ftplib.error_perm:
+            ftp.mkd(current)
+            ftp.cwd(current)
+
+
+def ftp_upload(local_path: Path, remote_filename: str = "MadWorld.html", archive_name: str = ""):
     host = os.getenv("FTP_HOST", "")
     user = os.getenv("FTP_USER", "")
     pwd  = os.getenv("FTP_PASS", "")
-    path = os.getenv("FTP_PATH", "/public_html/")
+    base = os.getenv("FTP_PATH", "/public_html/")
     if not all([host, user, pwd]):
         logger.warning("FTP credentials not set — skipping upload")
         return False
     try:
-        with ftplib.FTP_TLS(host, timeout=60) as ftp:
-            ftp.login(user, pwd)
-            ftp.prot_p()
-            ftp.cwd(path)
-            with open(local_path, "rb") as f:
-                ftp.storbinary(f"STOR {remote_filename}", f)
+        ftp = _ftp_connect(host, user, pwd)
+        # Upload main file
+        ftp.cwd(base)
+        with open(local_path, "rb") as f:
+            ftp.storbinary(f"STOR {remote_filename}", f)
         logger.info("✅ Uploaded to https://jonestech.xyz/%s", remote_filename)
+        # Upload dated archive copy
+        if archive_name:
+            archive_dir = base.rstrip("/") + "/archive/madworld"
+            try:
+                _ftp_mkdirs(ftp, archive_dir)
+                with open(local_path, "rb") as f:
+                    ftp.storbinary(f"STOR {archive_name}", f)
+                logger.info("📁 Archived to https://jonestech.xyz/archive/madworld/%s", archive_name)
+            except Exception as ae:
+                logger.warning("Archive upload failed: %s", ae)
+        ftp.quit()
         return True
     except Exception as e:
-        logger.warning("FTP_TLS failed (%s), trying plain FTP...", e)
-        try:
-            with ftplib.FTP(host, timeout=60) as ftp:
-                ftp.login(user, pwd)
-                ftp.cwd(path)
-                with open(local_path, "rb") as f:
-                    ftp.storbinary(f"STOR {remote_filename}", f)
-            logger.info("✅ Uploaded via plain FTP to https://jonestech.xyz/%s", remote_filename)
-            return True
-        except Exception as e2:
-            logger.error("FTP upload failed: %s", e2)
-            return False
+        logger.error("FTP upload failed: %s", e)
+        return False
 
 # ── main ───────────────────────────────────────────────────────────────────────
 def main(dry_run: bool = False):
@@ -667,9 +693,10 @@ def main(dry_run: bool = False):
         logger.info("Dry run — skipping FTP upload")
         return
 
-    # 5. FTP upload
+    # 5. FTP upload (main + dated archive)
+    archive_name = datetime.now().strftime("MadWorld-%Y-%m-%d.html")
     logger.info("Uploading to jonestech.xyz...")
-    ftp_upload(OUTPUT_PATH)
+    ftp_upload(OUTPUT_PATH, archive_name=archive_name)
     logger.info("🎉 MadWorld done!")
 
 if __name__ == "__main__":
