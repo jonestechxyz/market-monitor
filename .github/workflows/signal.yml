@@ -1,0 +1,31 @@
+name: Signal — Daily Futurology
+
+on:
+  schedule:
+    - cron: '0 7 * * *'   # 07:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install openai requests
+
+      - name: Build and upload Signal
+        env:
+          GROQ_API_KEY:  ${{ secrets.GROQ_API_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN:  ${{ secrets.CF_API_TOKEN }}
+          FTP_HOST:      ${{ secrets.FTP_HOST }}
+          FTP_USER:      ${{ secrets.FTP_USER }}
+          FTP_PASS:      ${{ secrets.FTP_PASS }}
+          FTP_PATH:      ${{ secrets.FTP_PATH }}
+          OUTPUT_PATH:   /tmp/Signal.html
+        run: python market_monitor/signalfeed.py
