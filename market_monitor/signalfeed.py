@@ -62,24 +62,48 @@ THEMES = [
 HORIZONS = ["1 year", "3 years", "5 years"]
 
 # ── groq forecast ──────────────────────────────────────────────────────────────
-def get_forecast(day_of_year: int) -> dict:
-    theme_name, theme_desc = THEMES[day_of_year % len(THEMES)]
-    horizon = HORIZONS[day_of_year % len(HORIZONS)]
+def get_forecasts(day_of_year: int) -> dict:
+    lead_theme_name, lead_theme_desc = THEMES[day_of_year % len(THEMES)]
+    lead_horizon = HORIZONS[day_of_year % len(HORIZONS)]
 
-    prompt = f"""You are a rigorous futurist analyst writing a daily signal briefing.
+    # Pick 3 different supporting themes from the rest
+    supporting = [THEMES[(day_of_year + i + 1) % len(THEMES)] for i in range(3)]
+    supporting_horizons = [HORIZONS[(day_of_year + i + 1) % len(HORIZONS)] for i in range(3)]
 
-Today's theme: {theme_name} — {theme_desc}
-Horizon: {horizon} from now
+    prompt = f"""You are a rigorous futurist analyst writing a daily Signal briefing page.
 
-Write a near-future forecast in this exact JSON format:
+Produce a JSON object with this exact structure:
+
 {{
-  "theme": "{theme_name}",
-  "horizon": "{horizon}",
-  "headline": "A single sharp forecast statement (max 12 words)",
-  "subhead": "One sentence expanding the headline (max 25 words)",
-  "body": "Three paragraphs. First: what is already happening now that makes this forecast credible. Second: the specific change or threshold crossed within the horizon. Third: what this means for ordinary people or society. Each paragraph 3-4 sentences. Analytical, grounded, no hype.",
-  "signal_tags": ["3 to 5 short tags like weak-signal keywords"],
-  "image_prompt": "A cinematic scene visualising this forecast. Photorealistic, near-future aesthetic, no text. Max 20 words."
+  "lead": {{
+    "theme": "{lead_theme_name}",
+    "horizon": "{lead_horizon}",
+    "headline": "Sharp forecast statement, max 12 words",
+    "subhead": "One sentence expanding the headline, max 25 words",
+    "body": "Three substantive paragraphs separated by blank lines. Para 1: what is already happening now that makes this credible. Para 2: the specific threshold or change crossed within {lead_horizon}. Para 3: what this means for society. Each paragraph 3-4 sentences. Analytical, grounded, no hype.",
+    "signal_tags": ["3 to 5 weak-signal keyword tags"],
+    "image_prompt": "Cinematic near-future scene, photorealistic, no text, max 20 words"
+  }},
+  "signals": [
+    {{
+      "theme": "{supporting[0][0]}",
+      "horizon": "{supporting_horizons[0]}",
+      "headline": "Sharp forecast, max 10 words",
+      "summary": "2-3 sentences. One concrete prediction grounded in current trends."
+    }},
+    {{
+      "theme": "{supporting[1][0]}",
+      "horizon": "{supporting_horizons[1]}",
+      "headline": "Sharp forecast, max 10 words",
+      "summary": "2-3 sentences. One concrete prediction grounded in current trends."
+    }},
+    {{
+      "theme": "{supporting[2][0]}",
+      "horizon": "{supporting_horizons[2]}",
+      "headline": "Sharp forecast, max 10 words",
+      "summary": "2-3 sentences. One concrete prediction grounded in current trends."
+    }}
+  ]
 }}
 
 Return ONLY the JSON. No markdown. No commentary."""
@@ -88,7 +112,7 @@ Return ONLY the JSON. No markdown. No commentary."""
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
-        max_tokens=1200,
+        max_tokens=2000,
     )
     raw = resp.choices[0].message.content.strip()
     match = re.search(r'\{.*\}', raw, re.DOTALL)
@@ -121,11 +145,26 @@ def generate_image_b64(prompt: str) -> str:
 
 
 # ── html builder ───────────────────────────────────────────────────────────────
-def build_html(forecast: dict, image_data: str, date_str: str) -> str:
+def build_html(data: dict, image_data: str, date_str: str) -> str:
+    forecast = data["lead"]
+    signals  = data.get("signals", [])
+
     tags_html = "".join(f'<span class="tag">{t}</span>' for t in forecast.get("signal_tags", []))
-    img_html = f'<img class="hero-img" src="{image_data}" alt="signal image">' if image_data else '<div class="hero-placeholder"></div>'
+    img_html  = f'<img class="hero-img" src="{image_data}" alt="signal image">' if image_data else '<div class="hero-placeholder"></div>'
     paragraphs = forecast["body"].strip().split("\n\n")
-    body_html = "".join(f"<p>{p.strip()}</p>" for p in paragraphs if p.strip())
+    body_html  = "".join(f"<p>{p.strip()}</p>" for p in paragraphs if p.strip())
+
+    signals_html = ""
+    for s in signals:
+        signals_html += f"""
+        <div class="signal-card">
+          <div class="signal-meta">
+            <span class="signal-theme">{s['theme']}</span>
+            <span class="signal-horizon">{s['horizon']}</span>
+          </div>
+          <div class="signal-headline">{s['headline']}</div>
+          <div class="signal-summary">{s['summary']}</div>
+        </div>"""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -335,6 +374,87 @@ def build_html(forecast: dict, image_data: str, date_str: str) -> str:
     border-radius: 2px;
   }}
 
+  /* ── SIGNAL CARDS ── */
+  .signals-section {{
+    margin-top: 64px;
+  }}
+
+  .signals-label {{
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }}
+
+  .signals-label::before, .signals-label::after {{
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }}
+
+  .signals-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }}
+
+  .signal-card {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    transition: border-color 0.2s;
+  }}
+
+  .signal-card:hover {{
+    border-color: var(--accent2);
+  }}
+
+  .signal-meta {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }}
+
+  .signal-theme {{
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }}
+
+  .signal-horizon {{
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    background: var(--border);
+    padding: 2px 7px;
+    border-radius: 2px;
+  }}
+
+  .signal-headline {{
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-bright);
+    line-height: 1.3;
+    margin-bottom: 10px;
+  }}
+
+  .signal-summary {{
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }}
+
   /* ── FOOTER ── */
   .site-footer {{
     margin-top: 64px;
@@ -395,6 +515,13 @@ def build_html(forecast: dict, image_data: str, date_str: str) -> str:
 
   <div class="tags">
     {tags_html}
+  </div>
+
+  <div class="signals-section">
+    <div class="signals-label">More Signals</div>
+    <div class="signals-grid">
+      {signals_html}
+    </div>
   </div>
 
   <footer class="site-footer">
@@ -468,13 +595,15 @@ def main(dry_run: bool = False):
 
     logger.info("Generating forecast for day %d (%s)", day_of_year, date_str)
 
-    forecast = get_forecast(day_of_year)
+    data = get_forecasts(day_of_year)
+    forecast = data["lead"]
     logger.info("Theme: %s | Horizon: %s", forecast["theme"], forecast["horizon"])
     logger.info("Headline: %s", forecast["headline"])
+    logger.info("Supporting signals: %d", len(data.get("signals", [])))
 
     image_data = generate_image_b64(forecast.get("image_prompt", ""))
 
-    html = build_html(forecast, image_data, date_str)
+    html = build_html(data, image_data, date_str)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     logger.info("Written to %s", OUTPUT_PATH)
 
