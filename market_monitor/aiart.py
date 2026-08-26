@@ -87,7 +87,7 @@ def pick_theme_and_prompts(date_str: str, count: int = 20) -> tuple[str, list[st
     seed_theme = THEME_CANDIDATES[hash(date_str) % len(THEME_CANDIDATES)]
     try:
         resp = groq.chat.completions.create(
-            model="moonshotai/kimi-k2-instruct",
+            model="llama-3.1-70b-versatile",
             messages=[
                 {
                     "role": "system",

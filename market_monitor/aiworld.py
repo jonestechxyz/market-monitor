@@ -107,7 +107,7 @@ def groq_brief(items: list[dict]) -> dict:
     numbered = "\n".join(f"{i+1}. {it['title']}" for i, it in enumerate(items))
     try:
         resp = groq.chat.completions.create(
-            model="moonshotai/kimi-k2-instruct",
+            model="llama-3.1-70b-versatile",
             messages=[
                 {
                     "role": "system",

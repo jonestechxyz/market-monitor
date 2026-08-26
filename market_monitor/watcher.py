@@ -127,7 +127,7 @@ Only return JSON."""
 
     try:
         response = groq.chat.completions.create(
-            model="moonshotai/kimi-k2-instruct",
+            model="llama-3.1-70b-versatile",
             messages=[
                 {"role": "system", "content": "You are a financial analyst. Return only valid JSON."},
                 {"role": "user", "content": prompt}

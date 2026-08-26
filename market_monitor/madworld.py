@@ -105,7 +105,7 @@ def groq_pick_stories(headlines: list[str]) -> list[dict]:
     numbered = "\n".join(f"{i+1}. {h}" for i, h in enumerate(headlines))
     try:
         resp = groq.chat.completions.create(
-            model="moonshotai/kimi-k2-instruct",
+            model="llama-3.1-70b-versatile",
             messages=[
                 {
                     "role": "system",
@@ -148,7 +148,7 @@ def groq_pick_stories(headlines: list[str]) -> list[dict]:
                 # Truncated — retry with smaller output request
                 logger.warning("Groq JSON parse failed, retrying with tighter prompt...")
                 resp2 = groq.chat.completions.create(
-                    model="moonshotai/kimi-k2-instruct",
+                    model="llama-3.1-70b-versatile",
                     messages=[
                         {"role": "system", "content": "Return ONLY valid compact JSON. No prose. No markdown."},
                         {"role": "user", "content": (
