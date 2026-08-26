@@ -205,7 +205,7 @@ def groq_article_takes(headlines: list[str], section: str) -> list[str]:
     try:
         numbered = "\n".join(f"{i+1}. {h}" for i, h in enumerate(headlines))
         resp = groq.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[
                 {"role": "system", "content": "You are a sharp market analyst. Be direct, contrarian when warranted, and specific. No fluff."},
                 {"role": "user", "content": f"""For each headline in the {section} section, write ONE punchy sentence: a market implication, prediction, or contrarian take. Be specific — mention stocks, sectors or price impacts where relevant.
@@ -234,7 +234,7 @@ def groq_summarise(headlines: list[str], section: str) -> str:
         return ""
     try:
         resp = groq.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[
                 {"role": "system", "content": "You are a sharp financial journalist. Be concise, insightful, no fluff."},
                 {"role": "user", "content": f"Write a 2-sentence editor's summary of these {section} headlines:\n" + "\n".join(f"- {h}" for h in headlines)}
@@ -252,7 +252,7 @@ def groq_big_read(all_headlines: list[str]) -> dict:
     try:
         headlines_str = "\n".join(f"- {h}" for h in all_headlines[:20])
         resp = groq.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[
                 {"role": "system", "content": "You are a Wired magazine staff writer. Return ONLY valid JSON with no markdown, no code fences, no extra text."},
                 {"role": "user", "content": f"From these headlines pick the most important story and write a Wired-style feature. Return ONLY this JSON structure with no other text:\n{{\"title\": \"short punchy headline\", \"standfirst\": \"one bold sentence\", \"body\": \"three paragraphs separated by double newline\"}}\n\nHeadlines:\n{headlines_str}"}
@@ -316,7 +316,7 @@ def groq_ai_correlation(asian_movers: list) -> dict:
 
     try:
         resp = groq.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[
                 {"role": "system", "content": (
                     "You are a professional equity analyst specialising in AI/semiconductor stocks. "
@@ -372,7 +372,7 @@ def groq_market_take(movers: list) -> str:
     try:
         mover_str = ", ".join(f"{m.get('name','?')} ({m.get('pct_change',0):+.1f}%)" for m in movers[:6])
         resp = groq.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[
                 {"role": "system", "content": "You are a markets desk analyst. Two sentences max."},
                 {"role": "user", "content": f"Give a sharp overnight take on these Asian movers: {mover_str}"}

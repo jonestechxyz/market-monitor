@@ -109,7 +109,7 @@ Produce a JSON object with this exact structure:
 Return ONLY the JSON. No markdown. No commentary."""
 
     resp = groq.chat.completions.create(
-        model="llama-3.1-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
         max_tokens=2000,
