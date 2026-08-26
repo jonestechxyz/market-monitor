@@ -189,7 +189,8 @@ def generate_image_b64(scene_prompt: str, width: int = 832, height: int = 512) -
     full_prompt = f"{MAD_STYLE}, {scene_prompt}"
     url = CF_IMAGE_URL.format(account_id=CF_ACCOUNT_ID)
     headers = {"Authorization": f"Bearer {CF_API_TOKEN}"}
-    payload = {"prompt": full_prompt, "num_steps": 4, "width": width, "height": height}
+    # flux-1-schnell accepts only prompt + steps (max 8); width/height are not in its schema
+    payload = {"prompt": full_prompt[:2000], "steps": 4}
     for attempt in range(3):
         try:
             resp = requests.post(url, json=payload, headers=headers, timeout=60)
@@ -198,6 +199,8 @@ def generate_image_b64(scene_prompt: str, width: int = 832, height: int = 512) -
                 logger.warning("CF rate limited, waiting %ds...", wait)
                 time.sleep(wait)
                 continue
+            if not resp.ok:
+                logger.error("CF %d body: %s", resp.status_code, resp.text[:300])
             resp.raise_for_status()
             data = resp.json()
             b64 = data["result"]["image"]

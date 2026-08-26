@@ -127,7 +127,8 @@ def generate_image_b64(prompt: str) -> str:
         return ""
     url = CF_IMAGE_URL.format(account_id=CF_ACCOUNT_ID)
     headers = {"Authorization": f"Bearer {CF_API_TOKEN}"}
-    payload = {"prompt": f"cinematic near-future photorealistic, {prompt}", "num_steps": 4, "width": 1024, "height": 576}
+    # flux-1-schnell accepts only prompt + steps (max 8); width/height are not in its schema
+    payload = {"prompt": f"cinematic near-future photorealistic, {prompt}"[:2000], "steps": 4}
     for attempt in range(3):
         try:
             resp = requests.post(url, json=payload, headers=headers, timeout=60)
