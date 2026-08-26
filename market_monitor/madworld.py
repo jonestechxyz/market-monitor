@@ -139,7 +139,16 @@ def groq_pick_stories(headlines: list[str]) -> list[dict]:
         content = resp.choices[0].message.content.strip()
         content = re.sub(r"^```[\w]*\n?", "", content).strip()
         content = re.sub(r"\n?```$", "", content).strip()
+        logger.info("Groq raw response (first 300): %s", content[:300])
+        # Accept both JSON array [...] and object wrapping {"stories":[...]} etc.
         match = re.search(r'\[.*\]', content, re.DOTALL)
+        if not match:
+            obj = re.search(r'\{.*\}', content, re.DOTALL)
+            if obj:
+                parsed = json.loads(obj.group(0))
+                arr = next((v for v in parsed.values() if isinstance(v, list)), None)
+                if arr:
+                    return arr[:6]
         if match:
             try:
                 stories = json.loads(match.group(0))
