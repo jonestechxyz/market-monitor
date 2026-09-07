@@ -67,11 +67,68 @@ NEWS_QUERIES = [
     "social media OR viral OR internet controversy",
 ]
 
+# Direct publisher feeds — used when Google News blocks datacenter IPs (503).
+FALLBACK_FEEDS = [
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "https://feeds.bbci.co.uk/news/technology/rss.xml",
+    "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml",
+    "https://feeds.npr.org/1001/rss.xml",
+    "https://feeds.skynews.com/feeds/rss/world.xml",
+    "https://www.theguardian.com/world/rss",
+    "https://feeds.arstechnica.com/arstechnica/index",
+]
+
+BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+)
+
+
 # ── rss fetch ──────────────────────────────────────────────────────────────────
+def _parse_feed(content: bytes, max_age_hours: int, limit: int) -> list[dict]:
+    """Parse an RSS payload into recent {title, link} items."""
+    root = ET.fromstring(content)
+    items = []
+    now = datetime.now(timezone.utc)
+    for item in root.findall(".//item"):
+        if len(items) >= limit:
+            break
+        title = item.findtext("title", "")
+        link = item.findtext("link", "")
+        pub = item.findtext("pubDate", "")
+        try:
+            pub_dt = parsedate_to_datetime(pub)
+            if (now - pub_dt).total_seconds() / 3600 > max_age_hours:
+                continue
+        except Exception:
+            pass
+        clean_title = re.sub(r"\s*-\s*[^-]+$", "", title).strip()
+        if clean_title:
+            items.append({"title": clean_title, "link": link})
+    return items
+
+
+def fetch_feed_url(url: str, max_age_hours: int = 28, limit: int = 8) -> list[dict]:
+    """Fetch a plain RSS URL (no Google News query wrapping)."""
+    try:
+        r = requests.get(url, timeout=15, headers={"User-Agent": BROWSER_UA})
+        r.raise_for_status()
+        return _parse_feed(r.content, max_age_hours, limit)
+    except Exception as e:
+        logger.error("Feed failed for %s: %s", url, e)
+        return []
+
+
 def fetch_rss(query: str, max_age_hours: int = 28, limit: int = 8) -> list[dict]:
     url = RSS_BASE.format(query=urllib.parse.quote(query))
     try:
-        r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        r = None
+        for attempt in range(3):
+            r = requests.get(url, timeout=15, headers={"User-Agent": BROWSER_UA})
+            if r.status_code in (429, 503) and attempt < 2:
+                time.sleep(3 * (attempt + 1))
+                continue
+            break
         r.raise_for_status()
         root = ET.fromstring(r.content)
         items = []
@@ -665,6 +722,14 @@ def main(dry_run: bool = False):
         items = fetch_rss(query, limit=6)
         all_headlines.extend(i["title"] for i in items)
 
+    # 1b. If Google News blocked us (503s), fall back to direct publisher feeds
+    if len(all_headlines) < 10:
+        logger.warning("Only %d headlines from Google News — using fallback feeds", len(all_headlines))
+        for feed in FALLBACK_FEEDS:
+            items = fetch_feed_url(feed, limit=6)
+            logger.info("Fallback %s → %d items", feed.split("/")[2], len(items))
+            all_headlines.extend(i["title"] for i in items)
+
     # Deduplicate
     seen = set()
     unique = []
@@ -675,10 +740,18 @@ def main(dry_run: bool = False):
             unique.append(h)
     logger.info("Got %d unique headlines", len(unique))
 
+    if not unique:
+        logger.error("No headlines from any source — aborting without upload (keeping existing page)")
+        return
+
     # 2. Groq picks + writes captions
     logger.info("Asking Groq to pick and satirize...")
     stories = groq_pick_stories(unique[:40])
     logger.info("Got %d stories from Groq", len(stories))
+
+    if not stories:
+        logger.error("Groq returned no stories — aborting without upload (keeping existing page)")
+        return
 
     # 3. Generate images via Cloudflare Workers AI
     if CF_ACCOUNT_ID and CF_API_TOKEN:
