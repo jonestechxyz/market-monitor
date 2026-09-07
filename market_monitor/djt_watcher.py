@@ -51,7 +51,7 @@ def groq_analyse(post_text: str) -> str:
     """Return a short market/geopolitical analysis of a DJT post."""
     try:
         resp = groq.chat.completions.create(
-            model="openai/gpt-oss-120b",
+            model="groq/compound",
             messages=[
                 {
                     "role": "system",
