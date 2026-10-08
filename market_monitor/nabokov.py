@@ -213,7 +213,7 @@ def main(dry_run: bool = False):
         return
     logger.info("Piece: %s", piece["title"])
 
-    image = generate_image_b64(f"{PLATE_STYLE}, {piece.get('image_prompt', '')}")
+    image = generate_image_b64(piece.get("image_prompt", ""), style=PLATE_STYLE)
 
     mp3 = OUT_DIR / f"Nabokov-{stamp}.mp3"
     has_audio = make_audio(piece, mp3)

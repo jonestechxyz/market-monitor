@@ -238,12 +238,12 @@ def groq_pick_stories(headlines: list[str]) -> list[dict]:
     return []
 
 # ── cloudflare workers ai image generation ────────────────────────────────────
-def generate_image_b64(scene_prompt: str, width: int = 832, height: int = 512) -> str:
+def generate_image_b64(scene_prompt: str, width: int = 832, height: int = 512, style: str = MAD_STYLE) -> str:
     """Generate image via Cloudflare Workers AI FLUX.1-schnell, return base64 data URI."""
     if not CF_ACCOUNT_ID or not CF_API_TOKEN:
         logger.warning("CF_ACCOUNT_ID/CF_API_TOKEN not set — skipping image generation")
         return ""
-    full_prompt = f"{MAD_STYLE}, {scene_prompt}"
+    full_prompt = f"{style}, {scene_prompt}"
     url = CF_IMAGE_URL.format(account_id=CF_ACCOUNT_ID)
     headers = {"Authorization": f"Bearer {CF_API_TOKEN}"}
     # flux-1-schnell accepts only prompt + steps (max 8); width/height are not in its schema
