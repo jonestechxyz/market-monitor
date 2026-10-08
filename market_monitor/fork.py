@@ -91,7 +91,9 @@ def forecast(items: list[dict], year: int) -> dict | None:
                 f"3. Write THE DARK FORK: a 220-280 word first-person dispatch from an ordinary person in "
                 f"{year}, in the timeline where they went wrong. Unsettling, plausible, not cartoonish.\n"
                 f"4. Name THE HINGE: the single decision or event in the next few years that separates the two.\n"
-                f"5. Give your honest odds (0-100) that we end up closer to the dark fork.\n\n"
+                f"5. Give your honest odds (0-100) that we end up closer to the dark fork.\n"
+                f"Each dispatch title must be an evocative headline of its own, never 'The Bright Fork' "
+                f"or 'The Dark Fork'.\n\n"
                 'Return JSON: {"signals":[{"n":number,"why":"..."}], '
                 '"bright":{"title":"...","who":"name, job, city","dispatch":"paragraphs separated by \\n\\n",'
                 '"image_prompt":"one sentence scene"}, '
