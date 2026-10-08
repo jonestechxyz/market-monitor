@@ -647,6 +647,8 @@ def build_html(stories: list[dict], date_str: str) -> str:
   Images by Pollinations.ai &nbsp;·&nbsp;
   Satire by Groq &nbsp;·&nbsp;
   Reality by Whoever Is In Charge Up There
+  &nbsp;·&nbsp;
+  <a href="/archive/madworld/index.php" style="color:var(--yellow);text-decoration:none;letter-spacing:.1em;">📁 ARCHIVE</a>
 </div>
 
 </body>
@@ -679,6 +681,22 @@ def _ftp_mkdirs(ftp, path):
             ftp.cwd(current)
 
 
+def ftp_upload_archive_index(ftp, base: str):
+    """Upload the PHP archive index alongside the dated editions."""
+    index_src = Path(__file__).parent / "madworld_archive.php"
+    if not index_src.exists():
+        logger.warning("madworld_archive.php not found — skipping index upload")
+        return
+    archive_dir = base.rstrip("/") + "/archive/madworld"
+    try:
+        _ftp_mkdirs(ftp, archive_dir)
+        with open(index_src, "rb") as f:
+            ftp.storbinary("STOR index.php", f)
+        logger.info("📋 Archive index uploaded to https://jonestech.xyz/archive/madworld/index.php")
+    except Exception as e:
+        logger.warning("Archive index upload failed: %s", e)
+
+
 def ftp_upload(local_path: Path, remote_filename: str = "MadWorld.html", archive_name: str = ""):
     host = os.getenv("FTP_HOST", "")
     user = os.getenv("FTP_USER", "")
@@ -704,6 +722,7 @@ def ftp_upload(local_path: Path, remote_filename: str = "MadWorld.html", archive
                 logger.info("📁 Archived to https://jonestech.xyz/archive/madworld/%s", archive_name)
             except Exception as ae:
                 logger.warning("Archive upload failed: %s", ae)
+        ftp_upload_archive_index(ftp, base)
         ftp.quit()
         return True
     except Exception as e:
