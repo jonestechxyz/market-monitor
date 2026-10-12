@@ -32,10 +32,8 @@ PLACEHOLDER = "[YOUR TEXT]"
 
 # Fixed, verified facts about the models we recommend. The writing model only picks a tier.
 TIERS = {
-    "small": {"name": "Llama 3.2 (3B)", "tag": "llama3.2:3b", "size": "2 GB",
-              "runs_on": "any recent laptop, 8 GB of memory is plenty"},
-    "medium": {"name": "Gemma 3 (4B)", "tag": "gemma3:4b", "size": "3.4 GB",
-               "runs_on": "a laptop with 8 GB of memory or more"},
+    "small": {"name": "Llama 3.2", "tag": "llama3.2:3b", "size": "2 GB", "runs_on": "any laptop from the last few years"},
+    "medium": {"name": "Gemma 3", "tag": "gemma3:4b", "size": "3.4 GB", "runs_on": "most laptops from the last few years"},
 }
 
 CATEGORIES = ["money and bills", "work and email", "home and repairs", "cooking and food", "travel",
@@ -47,10 +45,12 @@ ART_STYLE = ("vintage instruction-manual illustration, two-colour risograph prin
              "clean isometric line drawing, no text, no letters")
 
 
-def past_titles() -> list[str]:
+def past_titles(today: str) -> list[str]:
+    """Titles of earlier editions. Today's own file is left out so a re-run replaces it and keeps its number."""
     try:
         page = requests.get(ARCHIVE + "index.php", timeout=20).content.decode("utf-8")
-        return [html.unescape(t) for t in re.findall(r'class="t">(.*?)</div>', page)]
+        rows = re.findall(r'href="(Use-[\d-]+\.html)".*?class="t">(.*?)</div>', page, re.S)
+        return [html.unescape(t) for f, t in reversed(rows) if today not in f]
     except Exception as e:
         logger.warning("Could not read archive (%s) — assuming no past editions", e)
         return []
@@ -62,29 +62,34 @@ def write_use(category: str, done: list[str]) -> dict | None:
         model="openai/gpt-oss-120b",
         messages=[
             {"role": "system", "content": (
-                "You write a daily column for ordinary, non-technical people: one genuinely useful thing "
-                "to do with an AI language model. Plain words, no hype, no jargon. You are honest about "
-                "what these models get wrong. Return ONLY valid JSON."
+                "You write a daily column for people who are NOT comfortable with technology: a retired "
+                "teacher, a busy parent, a shop owner. Each column is one genuinely useful thing to do with "
+                "an AI chat assistant. Write the way a friendly newspaper advice column does: short sentences, "
+                "everyday words. Call it 'the AI', never 'the model' or 'LLM'. Never use these words: prompt, "
+                "model, offline, parameters, tokens, output, input, generate, hallucinate, placeholder, data. "
+                "Be honest about what the AI gets wrong. Return ONLY valid JSON."
             )},
             {"role": "user", "content": (
                 f"Today's area: {category}.\n"
                 f"Already covered, do not repeat or closely resemble:\n{avoid}\n\n"
-                "Pick one specific, practical task where the person pastes in some text of their own and the "
-                "model does something useful with it. It must work with a small offline model: no web "
-                "access, no up-to-date facts, no arithmetic that has to be exact.\n\n"
+                "Pick one specific, practical task from ordinary daily life where the person pastes in some "
+                "text of their own (a letter, a bill, an email, a recipe, a leaflet, instructions) and the AI "
+                "does something useful with it. Nothing about technology, science papers, coding or AI itself. "
+                "It must not need the internet, today's news, or exact sums.\n\n"
                 "Return JSON with keys:\n"
-                '"title": the task as a short imperative, under 10 words, naming the specific thing '
-                '(e.g. "Turn a dense appliance manual into a one-page cheat-sheet", not "Create a cheat-sheet")\n'
-                '"why": two sentences on why this is worth doing\n'
-                f'"prompt": the exact prompt to paste, written to work on a small model, containing the '
-                f'placeholder {PLACEHOLDER} exactly once where the person\'s own text goes\n'
-                f'"example_input": a realistic 60-120 word example of what someone would paste in place of '
-                f"{PLACEHOLDER} (invented, no real people or companies)\n"
-                '"steps": 3 or 4 short steps for using the result well\n'
-                '"watch_out": 2 or 3 specific ways the model tends to get this task wrong\n'
-                '"privacy": one sentence on what not to paste in, or why offline matters here\n'
-                '"tier": "small" if a 3-billion-parameter model handles it, "medium" if it needs a bit more\n'
-                '"image_prompt": one sentence describing a simple scene that illustrates the task'
+                '"title": the task as a short instruction, under 10 words, naming the specific everyday thing '
+                '(e.g. "Make sense of a confusing letter from the council", not "Summarise a document")\n'
+                '"why": two short sentences on how this helps, in everyday words\n'
+                f'"prompt": the exact words to paste to the AI, written as a clear plain-English request, '
+                f'containing {PLACEHOLDER} exactly once where the person\'s own text goes\n'
+                f'"example_input": a realistic 60-120 word everyday example of what someone would paste in '
+                f"place of {PLACEHOLDER} (made up, no real people or companies)\n"
+                '"steps": 3 short steps for what to do with the answer once you have it. Do not explain how '
+                'to copy and paste\n'
+                '"watch_out": 2 or 3 specific mistakes the AI tends to make on this task, in everyday words\n'
+                '"privacy": one short sentence on what not to paste in (for example account numbers)\n'
+                '"tier": "small" for a simple task, "medium" if it needs more careful reasoning\n'
+                '"image_prompt": one sentence describing a simple everyday scene that illustrates the task'
             )},
         ],
         temperature=0.8,
@@ -134,9 +139,9 @@ def build_html(d: dict, number: int, date_str: str, image: str, sample: tuple[st
     if sample:
         sample_html = f"""
   <section>
-    <h3>What {e(tier["name"])} actually said</h3>
-    <p class="note">We pasted the example below into the prompt and ran it on the recommended model. This is its reply, unedited.</p>
-    <details><summary>The example we pasted in</summary><div class="box plain">{e(d["example_input"])}</div></details>
+    <h3>We tried it. Here is what the AI said</h3>
+    <p class="note">We used a made-up example and a small free AI. This is its answer, exactly as it came back.</p>
+    <details><summary>See the example we used</summary><div class="box plain">{e(d["example_input"])}</div></details>
     <div class="box reply">{e(sample[0])}</div>
   </section>"""
     return f"""<!DOCTYPE html>
@@ -183,19 +188,24 @@ def build_html(d: dict, number: int, date_str: str, image: str, sample: tuple[st
 <body>
 <main>
   <div class="mast"><b>A Use a Day</b><span>{e(date_str)}</span></div>
+  <p class="meta" style="margin:8px 0 0">One practical thing to do with AI, in plain words.</p>
   <div class="no">No. {number} · {e(d.get("category", ""))}</div>
   <h1>{e(d["title"])}</h1>
   <p class="why">{e(d["why"])}</p>
   {img}
   <section>
-    <h3>The prompt</h3>
-    <div class="box" id="prompt">{e(d["prompt"])}</div>
-    <button class="copy" data-copy="prompt">Copy prompt</button>
-    <p class="meta">Replace {e(PLACEHOLDER)} with your own text.</p>
+    <h3>What to say to the AI</h3>
+    <div class="box plain" id="prompt">{e(d["prompt"])}</div>
+    <button class="copy" data-copy="prompt">Copy these words</button>
+    <p class="meta">Where it says {e(PLACEHOLDER)}, paste in your own. {e(d["privacy"])}</p>
+  </section>
+  <section>
+    <h3>Where to paste it</h3>
+    <p>Open any AI chat you already use, such as ChatGPT, Claude, Gemini or Copilot. Paste the words above into the message box and send.</p>
   </section>
   {sample_html}
   <section>
-    <h3>Using the result</h3>
+    <h3>What to do with the answer</h3>
     <ol>{steps}</ol>
   </section>
   <section class="warn">
@@ -203,18 +213,22 @@ def build_html(d: dict, number: int, date_str: str, image: str, sample: tuple[st
     <ul>{watch}</ul>
   </section>
   <section>
-    <h3>Run it offline, free</h3>
-    <div class="run">
-      <div>1. Install Ollama from ollama.com (Mac, Windows or Linux).</div>
-      <div>2. Open Terminal and run:</div>
-      <div class="box" id="cmd">ollama run {e(tier["tag"])}</div>
-      <div><button class="copy" data-copy="cmd">Copy command</button></div>
-      <div>3. Paste the prompt. Nothing you type leaves your computer.</div>
-    </div>
-    <p class="meta">{e(tier["name"])} · {e(tier["size"])} download · runs on {e(tier["runs_on"])}. {e(d["privacy"])}</p>
+    <h3>Want to keep it private?</h3>
+    <p>You can run a free AI on your own computer. It needs no internet once it is set up, and nothing you type is sent anywhere.</p>
+    <details><summary>Show me how (about 10 minutes, a little technical)</summary>
+      <div class="run">
+        <div>1. Go to ollama.com, download the free Ollama app and open it.</div>
+        <div>2. Open the app called Terminal (on a Mac, press Command and Space, type Terminal, press Return). On Windows it is called Command Prompt.</div>
+        <div>3. Copy this line, paste it in and press Return:</div>
+        <div class="box" id="cmd">ollama run {e(tier["tag"])}</div>
+        <div><button class="copy" data-copy="cmd">Copy this line</button></div>
+        <div>4. Wait for the download ({e(tier["size"])}, once only). When you see <b>&gt;&gt;&gt;</b>, paste the words from the top of this page.</div>
+      </div>
+      <p class="meta">This uses a free AI called {e(tier["name"])}. It works on {e(tier["runs_on"])}. A free app called LM Studio does the same job with buttons instead of typing.</p>
+    </details>
   </section>
-  <footer>Written by machine, checked by running it. The example text is invented.
-    <a href="/archive/use/index.php">All uses</a></footer>
+  <footer>Written by an AI and tried out on a second one. The example is made up.
+    <a href="/archive/use/index.php">See them all</a></footer>
 </main>
 <script>
   document.querySelectorAll('.copy').forEach(b => b.onclick = async () => {{
@@ -248,7 +262,7 @@ def upload(live: Path, dated: Path):
 def main(dry_run: bool = False):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
-    done = past_titles()
+    done = past_titles(f"{now:%Y-%m-%d}")
     category = CATEGORIES[now.timetuple().tm_yday % len(CATEGORIES)]
     logger.info("Use No. %d — area: %s", len(done) + 1, category)
 
