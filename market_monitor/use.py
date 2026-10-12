@@ -117,6 +117,10 @@ def write_use(category: str, done: list[str]) -> dict | None:
         logger.error("No JSON in Groq response: %s", content[:300])
         return None
     d = json.loads(m.group(0))
+    # The writer sometimes double-escapes line breaks, leaving a literal backslash-n in the text.
+    for k in ("prompt", "example_input"):
+        if isinstance(d.get(k), str):
+            d[k] = d[k].replace("\\n", "\n").strip()
     if d.get("prompt", "").count(PLACEHOLDER) != 1 or not d.get("example_input") or not d.get("title"):
         logger.error("Use failed validation (placeholder count %s)", d.get("prompt", "").count(PLACEHOLDER))
         return None
