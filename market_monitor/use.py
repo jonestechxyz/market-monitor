@@ -131,6 +131,17 @@ def write_use(category: str, done: list[str]) -> dict | None:
     for k in ("prompt", "example_input"):
         if isinstance(d.get(k), str):
             d[k] = d[k].replace("\\n", "\n").strip()
+    # Lists sometimes arrive as one numbered string; split them so each item gets its own line.
+    for k in ("steps", "watch_out"):
+        v = d.get(k) or []
+        if isinstance(v, str):
+            v = re.split(r"\n+|(?<=[.!?])\s+(?=\d+[.)]\s)", v.replace("\\n", "\n"))
+            if len(v) == 1:  # unnumbered run of sentences
+                v = re.split(r"(?<=[.!?])\s+(?=[A-Z])", v[0])
+        d[k] = [re.sub(r"^\s*(\d+[.)]|[-•*])\s*", "", str(s)).strip() for s in v if str(s).strip()]
+    if not d["steps"] or not d["watch_out"]:
+        logger.error("Use failed validation (empty steps or warnings)")
+        return None
     if d.get("prompt", "").count(PLACEHOLDER) != 1 or not d.get("example_input") or not d.get("title"):
         logger.error("Use failed validation (placeholder count %s)", d.get("prompt", "").count(PLACEHOLDER))
         return None
@@ -172,7 +183,7 @@ def build_html(d: dict, number: int, date_str: str, image: str, sample: tuple[st
     <h3>We tried it. Here is what the AI said</h3>
     <p class="note">We used a made-up example and the free AI named above, running on an ordinary computer. This is its answer, exactly as it came back.</p>
     <details><summary>See the example we used</summary><div class="box plain">{e(d["example_input"])}</div></details>
-    <div class="box reply">{e(sample[0])}</div>
+    <div class="box reply">{re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", e(sample[0]))}</div>
   </section>"""
     return f"""<!DOCTYPE html>
 <html lang="en">
