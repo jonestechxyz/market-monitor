@@ -21,7 +21,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ollama/models
-          key: ollama-llama3.2-3b-gemma3-4b
+          key: ollama-gemma3-4b
       - name: Start Ollama
         run: |
           curl -fsSL https://ollama.com/install.sh | sh

@@ -40,7 +40,7 @@ $rows = array_reverse($rows);
 <body>
 <main>
   <h1>A Use a Day</h1>
-  <div class="sub"><?= count($rows) ?> practical things to do with AI, in plain words · <a href="/Use.html">today's</a></div>
+  <div class="sub"><?= count($rows) ?> useful things to do with AI on a building project · <a href="/Use.html">today's</a></div>
   <?php foreach ($rows as $r): ?>
   <a class="row" href="<?= htmlspecialchars($r['file']) ?>">
     <div class="n">No. <?= $r['no'] ?></div>

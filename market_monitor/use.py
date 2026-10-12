@@ -30,19 +30,21 @@ ARCHIVE = "https://jonestech.xyz/archive/use/"
 OLLAMA = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 PLACEHOLDER = "[YOUR TEXT]"
 
-# Fixed, verified facts about the models we recommend. The writing model only picks a tier.
+# Fixed, verified facts about the model the page recommends and the daily job tests on.
 TIERS = {
-    "small": {"name": "Llama 3.2", "tag": "llama3.2:3b", "size": "2 GB", "runs_on": "any laptop from the last few years"},
-    "medium": {"name": "Gemma 3", "tag": "gemma3:4b", "size": "3.4 GB", "runs_on": "most laptops from the last few years"},
+    "small": {"name": "Gemma 3", "tag": "gemma3:4b", "size": "3.4 GB", "runs_on": "most laptops from the last few years"},
 }
 
-CATEGORIES = ["bills and price rises", "renting and housing", "contracts and small print", "work and bosses",
-              "job hunting", "doctors and health letters (never diagnosis)", "insurance and claims",
-              "complaints and refunds", "scams and suspicious messages", "official letters and forms",
-              "big purchases and quotes", "difficult conversations", "money decisions (no investment advice)",
-              "family paperwork and care"]
+CATEGORIES = ["subcontract agreements", "tender documents and invitations to bid", "variations and change orders",
+              "delay notices and extension-of-time claims", "payment applications and valuations",
+              "specifications and scope of works", "supplier and subcontractor quotes",
+              "method statements and risk assessments", "site diaries and daily reports",
+              "meeting minutes and action lists", "long email chains with a client or designer",
+              "requests for information (RFIs) and their answers", "defect and snag lists",
+              "inspection and safety reports", "programme narratives and progress reports",
+              "handover, warranty and maintenance documents"]
 
-ART_STYLE = ("vintage instruction-manual illustration, two-colour risograph print in teal and orange on cream paper, "
+ART_STYLE = ("vintage construction-manual illustration, two-colour risograph print in teal and orange on cream paper, "
              "clean isometric line drawing, no text, no letters")
 
 
@@ -63,49 +65,57 @@ def write_use(category: str, done: list[str]) -> dict | None:
         model="openai/gpt-oss-120b",
         messages=[
             {"role": "system", "content": (
-                "You write a daily column for people who are NOT comfortable with technology: a retired "
-                "teacher, a busy parent, a shop owner. Each column is one genuinely useful thing to do with "
-                "an AI chat assistant. Write the way a friendly newspaper advice column does: short sentences, "
-                "everyday words. Call it 'the AI', never 'the model' or 'LLM'. Never use these words: prompt, "
-                "model, offline, parameters, tokens, output, input, generate, hallucinate, placeholder, data. "
-                "Be honest about what the AI gets wrong. Return ONLY valid JSON."
+                "You write a daily column for people who work in construction in Europe: site managers, small "
+                "contractors, subcontractors, estimators and project engineers. They know building thoroughly "
+                "and are NOT comfortable with technology. Each column is one genuinely useful thing to do with "
+                "an AI assistant running privately on their own computer, because project documents are "
+                "confidential and cannot be uploaded to an online service. Write like a sharp colleague "
+                "explaining over coffee: short sentences, plain words, proper construction terms. Call it "
+                "'the AI', never 'the model' or 'LLM'. Never use these words: prompt, model, offline, "
+                "parameters, tokens, output, input, generate, hallucinate, placeholder, data. European "
+                "setting: euros, metric units, dates as day-month-year. Do not name or quote any law, "
+                "regulation or standard contract clause number. Be honest about what the AI gets wrong. "
+                "Return ONLY valid JSON."
             )},
             {"role": "user", "content": (
-                f"Today's area: {category}.\n"
+                f"Today's kind of document: {category}.\n"
                 f"Already covered, do not repeat or closely resemble:\n{avoid}\n\n"
-                "Pick one specific use that most people have NO IDEA an AI can do for them. The reader should "
-                "think 'I didn't know it could do that' and want to try it tonight. It must save real money, "
-                "time or worry, or give them the upper hand when dealing with a company, landlord, employer, "
-                "insurer, doctor or official. The person pastes in some text of their own and the AI does "
-                "something a clever, well-informed friend would do with it.\n"
+                "Pick one specific thing the AI can do with that kind of document that most people on a "
+                "building project have NO IDEA is possible. The reader should think 'that would have saved me "
+                "last month'. It must protect money, time or their position in a dispute: catching a risk "
+                "before signing, finding what is missing, lining up evidence, spotting a contradiction, or "
+                "preparing a firm reply. The person pastes in text from the document and the AI does what a "
+                "careful commercial manager would do with it.\n"
                 "The level to aim for (do not copy these, invent a fresh one):\n"
-                "- Find the clause in a rental contract that could cost you your deposit\n"
-                "- Turn a hospital letter into the five questions to ask at your appointment\n"
-                "- Check a suspicious text message for the signs of a scam\n"
-                "- Spot what is missing from a builder's quote before you sign\n"
-                "- Draft a firm appeal against a parking fine using the notice's own wording\n"
-                "- See how your angry email will read to the person receiving it\n"
-                "REJECT anything a person could do themselves in two minutes: lists, shopping lists, plain "
-                "summaries, tidying text, bullet points. Nothing about technology, coding or AI itself. "
-                "It must not need the internet, today's news, or exact sums. Never present the AI as a "
-                "substitute for a lawyer or doctor: it helps the reader understand and prepare.\n\n"
+                "- Find every deadline in a subcontract that you could lose money by missing\n"
+                "- Check a subcontractor's quote against the scope and list what they have left out\n"
+                "- Pull the dated facts out of a site diary to support a delay claim\n"
+                "- Find where two answers to the same question contradict each other\n"
+                "- Turn rambling meeting minutes into who owes what by when, with the exact words quoted\n"
+                "- Read a variation instruction and list what is unclear before you price it\n"
+                "REJECT anything a person could do themselves in two minutes: plain summaries, tidying text, "
+                "simple lists. It must not need the internet, current prices, drawings or exact sums. Never "
+                "present the AI as a substitute for a lawyer, engineer or quantity surveyor: it helps the "
+                "reader find things and prepare, and a person checks the result.\n\n"
                 "Return JSON with keys:\n"
-                '"title": the task as a short instruction, under 11 words, naming the specific thing and the payoff\n'
-                '"why": two short sentences: the problem people have, and what this gets them\n'
+                '"title": the task as a short instruction, under 12 words, naming the document and the payoff\n'
+                '"why": two short sentences: the problem this causes on real projects, and what this gets them\n'
                 f'"prompt": the exact words to paste to the AI. Make it a GOOD request, the kind most people '
                 f"never think to write: tell the AI who to act as, exactly what to look for, to quote the exact "
                 f"words it is relying on, and to say plainly when something is not in the text. Plain English. "
                 f'It must contain {PLACEHOLDER} exactly once where the person\'s own text goes\n'
                 '"trick": one or two short sentences explaining the one thing in those words that makes the '
-                'answer much better, so the reader learns something they can reuse\n'
-                f'"example_input": a realistic 60-120 word everyday example of what someone would paste in '
-                f"place of {PLACEHOLDER} (made up, no real people or companies)\n"
+                'answer much better, so the reader learns something they can reuse. It must describe '
+                'something the words above really say (for example the role given, the instruction to quote, '
+                'or the instruction to say when nothing is found). Do not describe a technique they do not use\n'
+                f'"example_input": a realistic 90-150 word extract of that kind of document, as someone would '
+                f"paste in place of {PLACEHOLDER}: made up, European, with invented company names, and "
+                f"containing the kind of problem the task is meant to find\n"
                 '"steps": 3 short steps for what to do with the answer once you have it, including what to '
-                'double-check or who to show it to. Do not explain how to copy and paste\n'
-                '"watch_out": 2 or 3 specific mistakes the AI tends to make on this particular task, in everyday words\n'
-                '"privacy": one short sentence on what to remove from this particular kind of text before pasting it\n'
-                '"tier": "small" for a simple task, "medium" if it needs more careful reasoning\n'
-                '"image_prompt": one sentence describing a simple everyday scene that illustrates the task'
+                'check against the full document and who should see it. Do not explain how to copy and paste\n'
+                '"watch_out": 2 or 3 specific mistakes the AI tends to make on this particular task, in plain words\n'
+                '"privacy": one short sentence on why this particular kind of document should stay on your own computer\n'
+                '"image_prompt": one sentence describing a simple construction-site or site-office scene that illustrates the task'
             )},
         ],
         temperature=0.8,
@@ -160,7 +170,7 @@ def build_html(d: dict, number: int, date_str: str, image: str, sample: tuple[st
         sample_html = f"""
   <section>
     <h3>We tried it. Here is what the AI said</h3>
-    <p class="note">We used a made-up example and a small free AI. This is its answer, exactly as it came back.</p>
+    <p class="note">We used a made-up example and the free AI named above, running on an ordinary computer. This is its answer, exactly as it came back.</p>
     <details><summary>See the example we used</summary><div class="box plain">{e(d["example_input"])}</div></details>
     <div class="box reply">{e(sample[0])}</div>
   </section>"""
@@ -208,7 +218,7 @@ def build_html(d: dict, number: int, date_str: str, image: str, sample: tuple[st
 <body>
 <main>
   <div class="mast"><b>A Use a Day</b><span>{e(date_str)}</span></div>
-  <p class="meta" style="margin:8px 0 0">One practical thing to do with AI, in plain words.</p>
+  <p class="meta" style="margin:8px 0 0">One useful thing to do with AI on a building project, without sending your documents anywhere.</p>
   <div class="no">No. {number} · {e(d.get("category", ""))}</div>
   <h1>{e(d["title"])}</h1>
   <p class="why">{e(d["why"])}</p>
@@ -217,15 +227,23 @@ def build_html(d: dict, number: int, date_str: str, image: str, sample: tuple[st
     <h3>What to say to the AI</h3>
     <div class="box plain" id="prompt">{e(d["prompt"])}</div>
     <button class="copy" data-copy="prompt">Copy these words</button>
-    <p class="meta">Where it says {e(PLACEHOLDER)}, paste in your own. {e(d["privacy"])}</p>
+    <p class="meta">Where it says {e(PLACEHOLDER)}, paste in the text from your own document. {e(d["privacy"])}</p>
   </section>
   <section>
     <h3>Why these words work</h3>
     <p>{e(d.get("trick", ""))}</p>
   </section>
   <section>
-    <h3>Where to paste it</h3>
-    <p>Open any AI chat you already use, such as ChatGPT, Claude, Gemini or Copilot. Paste the words above into the message box and send.</p>
+    <h3>Where to run it: on your own computer</h3>
+    <p>Project documents are confidential, so do not paste them into an online AI such as ChatGPT unless your company has agreed to it. A free app called LM Studio runs an AI on your own computer instead. After the first download it needs no internet, and nothing you paste leaves the machine.</p>
+    <details><summary>Set it up once (about 15 minutes)</summary>
+      <div class="run">
+        <div>1. Go to lmstudio.ai, download LM Studio and open it.</div>
+        <div>2. Use its search to find <b>{e(tier["name"])}</b> and download it ({e(tier["size"])}, once only).</div>
+        <div>3. Open the chat, choose that AI at the top, paste the words above and press Return.</div>
+      </div>
+      <p class="meta">{e(tier["name"])} works on {e(tier["runs_on"])}. If your computer has 16 GB of memory or more, a larger one such as Gemma 3 12B reads long documents more carefully. For a long document, paste one section at a time.</p>
+    </details>
   </section>
   {sample_html}
   <section>
@@ -236,22 +254,7 @@ def build_html(d: dict, number: int, date_str: str, image: str, sample: tuple[st
     <h3>Watch out</h3>
     <ul>{watch}</ul>
   </section>
-  <section>
-    <h3>Want to keep it private?</h3>
-    <p>You can run a free AI on your own computer. It needs no internet once it is set up, and nothing you type is sent anywhere.</p>
-    <details><summary>Show me how (about 10 minutes, a little technical)</summary>
-      <div class="run">
-        <div>1. Go to ollama.com, download the free Ollama app and open it.</div>
-        <div>2. Open the app called Terminal (on a Mac, press Command and Space, type Terminal, press Return). On Windows it is called Command Prompt.</div>
-        <div>3. Copy this line, paste it in and press Return:</div>
-        <div class="box" id="cmd">ollama run {e(tier["tag"])}</div>
-        <div><button class="copy" data-copy="cmd">Copy this line</button></div>
-        <div>4. Wait for the download ({e(tier["size"])}, once only). When you see <b>&gt;&gt;&gt;</b>, paste the words from the top of this page.</div>
-      </div>
-      <p class="meta">This uses a free AI called {e(tier["name"])}. It works on {e(tier["runs_on"])}. A free app called LM Studio does the same job with buttons instead of typing.</p>
-    </details>
-  </section>
-  <footer>Written by an AI and tried out on a second one. The example is made up.
+  <footer>Written by an AI and tried out on a second one. The example is made up. Have a person check anything that matters.
     <a href="/archive/use/index.php">See them all</a></footer>
 </main>
 <script>
@@ -303,7 +306,7 @@ def main(dry_run: bool = False):
         logger.error("No use written — aborting, live page untouched")
         return
     d["category"] = category
-    logger.info("Use: %s (tier %s)", d["title"], d["tier"])
+    logger.info("Use: %s", d["title"])
 
     sample = run_on_model(TIERS[d["tier"]]["tag"], d["prompt"].replace(PLACEHOLDER, d["example_input"]))
     logger.info("Sample answer: %s", f"{len(sample[0])} chars in {sample[1]:.0f}s" if sample else "none")
