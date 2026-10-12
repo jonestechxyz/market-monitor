@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Certificates from a spreadsheet</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f6f1e4; --ink:#1e2a2a; --dim:#667370; --rule:#d4cbb4; --teal:#12706a; --orange:#d9622b; --box:#fffaf0; --ok:#12706a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#101615; --ink:#e7e3d6; --dim:#93a09c; --rule:#2b3634; --teal:#4cc2b8; --orange:#f08a52; --box:#18201f; --ok:#4cc2b8; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:18px/1.6 'Source Serif 4', Georgia, serif; }
+  main { max-width:820px; margin:0 auto; padding:32px 18px 80px; }
+  .mast { border-bottom:3px solid var(--teal); padding-bottom:8px; font:700 14px 'Space Grotesk', sans-serif; letter-spacing:.16em; text-transform:uppercase; color:var(--teal); }
+  h1 { font:700 clamp(32px,7vw,48px)/1.05 'Space Grotesk', sans-serif; margin:24px 0 12px; letter-spacing:-.02em; }
+  .lede { font-size:20px; margin:0 0 22px; }
+  h2 { font:700 13px 'Space Grotesk', sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--teal); margin:38px 0 10px; }
+  figure { margin:0; } figure img { width:100%; display:block; border:1px solid var(--rule); }
+  figcaption, .meta { color:var(--dim); font-size:15px; font-style:italic; margin-top:6px; }
+  ol.steps { list-style:none; padding:0; margin:0; counter-reset:s; }
+  ol.steps li { counter-increment:s; display:grid; grid-template-columns:38px 1fr; margin:10px 0; }
+  ol.steps li::before { content:counter(s); font:700 24px 'Space Grotesk', sans-serif; color:var(--teal); line-height:1.15; }
+  .tool { border:2px solid var(--teal); background:var(--box); padding:18px; margin-top:10px; }
+  .private { border-left:4px solid var(--orange); padding:2px 0 2px 14px; margin:0 0 16px; }
+  .drops { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .drop { border:2px dashed var(--rule); padding:16px 12px; text-align:center; cursor:pointer; min-width:0; }
+  .drop.over { border-color:var(--teal); } .drop.set { border-style:solid; border-color:var(--ok); }
+  .drop b { display:block; font:700 15px 'Space Grotesk', sans-serif; }
+  .drop span { display:block; color:var(--dim); font-size:14px; overflow-wrap:anywhere; }
+  button { font:700 14px 'Space Grotesk', sans-serif; letter-spacing:.05em; border-radius:4px; padding:11px 18px; cursor:pointer; }
+  .primary { background:var(--teal); color:var(--bg); border:0; } .primary:disabled { opacity:.45; cursor:default; }
+  .plain { background:transparent; color:var(--teal); border:1px solid var(--teal); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:14px; }
+  label.f { display:grid; gap:3px; font:500 13px 'Space Grotesk', sans-serif; color:var(--dim); flex:1; min-width:150px; }
+  input[type=text], input[type=number], select { font:15px 'JetBrains Mono', ui-monospace, monospace; padding:8px; border:1px solid var(--rule);
+    background:var(--bg); color:var(--ink); border-radius:4px; width:100%; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 0; }
+  .chip { font:13px 'JetBrains Mono', ui-monospace, monospace; padding:2px 8px; border:1px solid var(--rule); border-radius:12px; }
+  .chip.bad { border-color:var(--orange); color:var(--orange); }
+  #check, #result { margin-top:16px; font-size:16px; }
+  #bar { height:6px; background:var(--rule); margin-top:14px; display:none; } #bar i { display:block; height:100%; width:0; background:var(--teal); }
+  table { border-collapse:collapse; width:100%; font:13px 'JetBrains Mono', ui-monospace, monospace; }
+  th, td { border:1px solid var(--rule); padding:4px 8px; text-align:left; white-space:nowrap; }
+  th { background:var(--teal); color:var(--bg); }
+  .scroll { overflow-x:auto; max-height:240px; overflow-y:auto; margin-top:8px; }
+  #preview { background:#fff; color:#000; border:1px solid var(--rule); margin-top:8px; max-height:520px; overflow:auto; }
+  #preview .docx-wrapper { background:#fff; padding:0; } #preview .docx-wrapper > section.docx { box-shadow:none; margin:0 auto; }
+  details { margin-top:14px; } summary { cursor:pointer; color:var(--teal); font:700 14px 'Space Grotesk', sans-serif; }
+  code { font:15px 'JetBrains Mono', ui-monospace, monospace; background:var(--box); padding:1px 5px; border:1px solid var(--rule); }
+  footer { margin-top:50px; padding-top:14px; border-top:1px solid var(--rule); color:var(--dim); font-size:14px; }
+  @media (max-width:560px) { .drops { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="mast">Certificates from a spreadsheet</div>
+  <h1>200 certificates from one spreadsheet</h1>
+  <p class="lede">You have a list of assets and you need the same document for each one: a certificate of conformity, a handover sheet, a test record. Write it once, and let the list fill in the rest.</p>
+
+  <figure>
+    <img src="before-after.png" alt="A certificate template with placeholders beside the same certificate filled in for one asset">
+    <figcaption>Left: the template, written once in Word. Right: one of the finished certificates. All details are made up.</figcaption>
+  </figure>
+
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li><div><b>Keep the asset list in a spreadsheet.</b> One row per asset, one column per detail, with a name at the top of each column.</div></li>
+    <li><div><b>Write the certificate once, in Word.</b> Where a detail changes, type the column name in double curly brackets, for example <code>{{ serial_no }}</code>.</div></li>
+    <li><div><b>Drop both files below.</b> You get back a separate, correctly named Word file for every row, plus a register of what was made.</div></li>
+    <li><div><b>A person checks and signs.</b> This fills in details. It does not approve anything, and a signature line should stay empty until someone has checked.</div></li>
+  </ol>
+
+  <h2>Try it</h2>
+  <div class="tool">
+    <p class="private"><b>Your files stay on your computer.</b> Nothing is uploaded: the work is done by this page inside your browser. You can switch off your internet connection after the page has loaded and it will still work.</p>
+    <div class="drops">
+      <div class="drop" id="dropSheet"><b>1. The list</b><span id="sheetName">Drop an Excel or CSV file, or click to choose</span></div>
+      <div class="drop" id="dropTpl"><b>2. The template</b><span id="tplName">Drop a Word .docx file, or click to choose</span></div>
+    </div>
+    <input type="file" id="fileSheet" accept=".xlsx,.xls,.csv" hidden>
+    <input type="file" id="fileTpl" accept=".docx" hidden>
+    <div class="row"><button class="plain" id="demo">Use the made-up example files</button>
+      <span class="meta">or download them to look at: <a href="assets.xlsx" download>the list</a>, <a href="template.docx" download>the template</a></span></div>
+
+    <div id="check"></div>
+
+    <div id="options" hidden>
+      <div class="row">
+        <label class="f">Name each file after<select id="nameCol"></select></label>
+        <label class="f">File name starts with<input type="text" id="prefix" value="CoC_"></label>
+        <label class="f">Certificate numbers start<input type="text" id="certPrefix" value="CoC-2026-"></label>
+      </div>
+      <div class="row">
+        <label class="f">Only make one when this column…<select id="condCol"></select></label>
+        <label class="f">…says exactly<input type="text" id="condVal" placeholder="leave empty to make all"></label>
+      </div>
+      <div class="row"><button class="primary" id="go">Make the certificates</button><span class="meta" id="count"></span></div>
+    </div>
+    <div id="bar"><i></i></div>
+    <div id="result"></div>
+    <details id="prevWrap" hidden><summary>See the first finished certificate</summary><div id="preview"></div></details>
+    <details id="dataWrap" hidden><summary>See the list as the page read it</summary><div class="scroll" id="data"></div></details>
+  </div>
+
+  <h2>Good to know</h2>
+  <p><b>Two extra placeholders are always available:</b> <code>{{ certificate_no }}</code> gives each document the next number, and <code>{{ issue_date }}</code> gives today's date.</p>
+  <p><b>Rows with gaps are held back.</b> If a row has an empty cell that the template needs, no document is made for it. It is listed in the register with the reason, so a half-filled certificate never goes out.</p>
+  <p><b>Dates and numbers appear as they look in Excel.</b> Format the column the way you want it printed.</p>
+  <p><b>Large pictures in the template make every file large.</b> Shrink a logo before you put it in.</p>
+
+  <footer>A demonstration. The example company, assets and people are invented. Check every document before it is issued.</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.7/dist/pizzip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.50.0/build/docxtemplater.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.5/dist/docx-preview.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const BUILT_IN = ['certificate_no', 'issue_date'];
+let rows = null, columns = [], tplBytes = null, tags = [];
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// ── reading the two files ────────────────────────────────────────────────────
+function readSheet(buf, name) {
+  const wb = XLSX.read(buf, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  // raw:false gives each cell as it is displayed in Excel, so dates print the way the user formatted them.
+  const all = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' });
+  rows = all.filter(r => Object.values(r).some(v => String(v).trim() !== ''));
+  columns = rows.length ? Object.keys(rows[0]).map(c => c.trim()) : [];
+  rows = rows.map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.trim(), String(v).trim()])));
+  $('sheetName').textContent = `${name} · ${rows.length} rows`;
+  $('dropSheet').classList.add('set');
+  refresh();
+}
+
+function readTemplate(buf, name) {
+  const zip = new PizZip(buf);
+  let text = '';
+  for (const f of Object.keys(zip.files))
+    if (/^word\/(document|header\d*|footer\d*)\.xml$/.test(f))
+      text += zip.files[f].asText().replace(/<w:p[ >]/g, '\n<w:p ').replace(/<[^>]+>/g, '');
+  tags = [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map(m => m[1]))];
+  tplBytes = buf;
+  $('tplName').textContent = `${name} · ${Math.round(buf.byteLength / 1024)} KB · ${tags.length} placeholders`;
+  $('dropTpl').classList.add('set');
+  refresh();
+}
+
+function wire(drop, input, handler) {
+  drop.onclick = () => input.click();
+  input.onchange = async () => { const f = input.files[0]; if (f) handler(await f.arrayBuffer(), f.name); input.value = ''; };
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = async e => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) handler(await f.arrayBuffer(), f.name); };
+}
+wire($('dropSheet'), $('fileSheet'), readSheet);
+wire($('dropTpl'), $('fileTpl'), readTemplate);
+$('demo').onclick = async () => {
+  readSheet(await (await fetch('assets.xlsx')).arrayBuffer(), 'assets.xlsx (example)');
+  readTemplate(await (await fetch('template.docx')).arrayBuffer(), 'template.docx (example)');
+};
+
+// ── checking they fit together ───────────────────────────────────────────────
+function refresh() {
+  $('result').innerHTML = ''; $('prevWrap').hidden = true;
+  if (rows) {
+    $('dataWrap').hidden = false;
+    $('data').innerHTML = '<table><tr>' + columns.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>' +
+      rows.slice(0, 50).map(r => '<tr>' + columns.map(c => `<td>${esc(r[c])}</td>`).join('') + '</tr>').join('') + '</table>' +
+      (rows.length > 50 ? `<p class="meta">Showing the first 50 of ${rows.length} rows.</p>` : '');
+  }
+  if (!rows || !tplBytes) { $('options').hidden = true; $('check').innerHTML = ''; return; }
+
+  const unknown = tags.filter(t => !columns.includes(t) && !BUILT_IN.includes(t));
+  const unused = columns.filter(c => !tags.includes(c));
+  let html = '<b>Placeholders found in the template</b><div class="chips">' +
+    (tags.map(t => `<span class="chip ${unknown.includes(t) ? 'bad' : ''}">{{ ${esc(t)} }}</span>`).join('') || '<span class="meta">none</span>') + '</div>';
+  if (!tags.length) html += '<p>The template has no placeholders, so every document would be identical. Add some like <code>{{ column_name }}</code>.</p>';
+  if (unknown.length) html += `<p><b style="color:var(--orange)">No matching column for: ${unknown.map(esc).join(', ')}.</b> Those would be left blank. Check the spelling against the column names in row 1 of the list.</p>`;
+  if (unused.length) html += `<p class="meta">Columns the template does not use: ${unused.map(esc).join(', ')}. That is fine.</p>`;
+  if (tplBytes.byteLength * rows.length > 300e6) html += `<p><b style="color:var(--orange)">This will be large.</b> The template is ${Math.round(tplBytes.byteLength / 1024)} KB and there are ${rows.length} rows, about ${Math.round(tplBytes.byteLength * rows.length / 1e6)} MB in total. Shrink any pictures in the template if the page struggles.</p>`;
+  $('check').innerHTML = html;
+
+  const opts = columns.map(c => `<option>${esc(c)}</option>`).join('');
+  const keepName = $('nameCol').value, keepCond = $('condCol').value;
+  $('nameCol').innerHTML = opts; $('condCol').innerHTML = '<option value="">(no condition)</option>' + opts;
+  $('nameCol').value = columns.includes(keepName) ? keepName : columns[0];
+  if (columns.includes(keepCond)) $('condCol').value = keepCond;
+  else if (columns.includes('result')) { $('condCol').value = 'result'; $('condVal').value = 'Conforms'; }
+  $('count').textContent = `${rows.length} rows ready`;
+  $('options').hidden = false;
+}
+
+// ── making the documents ─────────────────────────────────────────────────────
+function fill(data) {
+  const doc = new docxtemplater(new PizZip(tplBytes), {
+    delimiters: { start: '{{', end: '}}' }, paragraphLoop: true, linebreaks: true,
+    parser: tag => ({ get: scope => scope[tag.trim()] }),
+    nullGetter: () => '',
+  });
+  doc.render(data);
+  return doc.getZip().generate({ type: 'uint8array', compression: 'DEFLATE' });
+}
+const csv = table => table.map(r => r.map(v => /[",\n;]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : v).join(',')).join('\r\n');
+const safe = s => String(s).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'row';
+
+$('go').onclick = async () => {
+  $('go').disabled = true; $('result').innerHTML = ''; $('bar').style.display = 'block';
+  const needed = tags.filter(t => columns.includes(t));
+  const condCol = $('condCol').value, condVal = $('condVal').value.trim();
+  const today = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+  const out = new JSZip(), issued = [['certificate_no', 'file', ...columns]], skipped = [['row', $('nameCol').value, 'reason']];
+  const used = new Set();
+  let first = null;
+  try {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i], label = r[$('nameCol').value];
+      const missing = needed.filter(t => r[t] === '');
+      if (missing.length) skipped.push([i + 2, label, 'missing: ' + missing.join(', ')]);
+      else if (condCol && condVal && r[condCol].toLowerCase() !== condVal.toLowerCase()) skipped.push([i + 2, label, `${condCol} is '${r[condCol]}'`]);
+      else {
+        const no = $('certPrefix').value + String(issued.length).padStart(4, '0');
+        let name = safe($('prefix').value + label);
+        for (let n = 2; used.has(name.toLowerCase()); n++) name = safe($('prefix').value + label) + '_' + n;
+        used.add(name.toLowerCase());
+        const bytes = fill({ ...r, certificate_no: no, issue_date: today });
+        first = first || bytes;
+        out.file(`certificates/${name}.docx`, bytes);
+        issued.push([no, name + '.docx', ...columns.map(c => r[c])]);
+      }
+      if (i % 10 === 0) { $('bar').firstElementChild.style.width = (i / rows.length * 100) + '%'; await new Promise(f => setTimeout(f)); }
+    }
+    out.file('register-issued.csv', '﻿' + csv(issued));
+    out.file('register-skipped.csv', '﻿' + csv(skipped));
+    const blob = await out.generateAsync({ type: 'blob' }, m => $('bar').firstElementChild.style.width = m.percent + '%');
+    const url = URL.createObjectURL(blob);
+    $('result').innerHTML = `<p><b>${issued.length - 1} documents made</b>, ${skipped.length - 1} rows held back.</p>` +
+      `<p><a href="${url}" download="certificates.zip"><button class="primary">Download certificates.zip (${(blob.size / 1e6).toFixed(1)} MB)</button></a></p>` +
+      (skipped.length > 1 ? '<div class="scroll"><table><tr><th>Row</th><th>' + esc(skipped[0][1]) + '</th><th>Why it was held back</th></tr>' +
+        skipped.slice(1).map(s => `<tr>${s.map(v => `<td>${esc(v)}</td>`).join('')}</tr>`).join('') + '</table></div>' : '');
+    if (first && window.docx) {
+      $('preview').innerHTML = ''; $('prevWrap').hidden = false;
+      docx.renderAsync(new Blob([first]), $('preview'), null, { inWrapper: true, ignoreWidth: false }).catch(() => $('prevWrap').hidden = true);
+    }
+  } catch (e) {
+    const detail = e.properties?.errors?.map(x => x.properties?.explanation).filter(Boolean).join(' ') || e.message;
+    $('result').innerHTML = `<p><b style="color:var(--orange)">The template could not be filled.</b> ${esc(detail)}</p>` +
+      '<p class="meta">This usually means a placeholder has an opening {{ without a closing }}, or the other way round.</p>';
+  }
+  $('bar').style.display = 'none'; $('bar').firstElementChild.style.width = 0; $('go').disabled = false;
+};
+</script>
+</body>
+</html>

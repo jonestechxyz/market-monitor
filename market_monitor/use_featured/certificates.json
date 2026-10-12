@@ -1,0 +1,31 @@
+{
+  "category": "certificates, declarations and other one-per-asset documents",
+  "title": "Fill 200 certificates of conformity from one asset list",
+  "why": "Every asset needs its own certificate, and each one is the same document with a different tag, serial number and date. Typing them one at a time takes days and invites copying mistakes.",
+  "idea": "Keep the assets in a spreadsheet and write the certificate once in Word, with a marker wherever a detail changes. The computer then makes a separate, correctly named Word file for every row. A correction is made once and the whole set is remade in seconds.",
+  "try_url": "/certificates/",
+  "try_label": "Try the working version with made-up files",
+  "how": [
+    "The asset list sits in Excel: one row per asset, one column per detail, with a name at the top of each column.",
+    "The certificate is written once in Word. Where a detail changes, the column name goes in double curly brackets.",
+    "The computer reads the list row by row and fills a copy of the certificate for each asset, numbering them as it goes.",
+    "Rows with a missing detail or a failed inspection are held back and listed with the reason, instead of producing a wrong certificate."
+  ],
+  "need": [
+    "The asset list as an Excel sheet, with tidy column names and no merged cells",
+    "Your approved certificate wording as a Word file",
+    "Someone authorised to check and sign the finished set"
+  ],
+  "before": "AHU-006 | Air handling unit | SN674351 | 05-09-2026\nP-018 | Circulation pump | (no serial) | 11-09-2026\nFD-001 | Fire door set | SN150631 | 05-10-2026",
+  "after": "CoC_AHU-006.docx  (certificate CoC-2026-0001)\nCoC_FD-001.docx   (certificate CoC-2026-0002)\nHeld back: P-018, missing serial number",
+  "person": "A certificate of conformity is a formal declaration, so a person checks the set and signs. The signature line is left empty on purpose: the computer fills in details, it does not approve anything.",
+  "watch_out": [
+    "A column name spelled differently in the list and in the template leaves a blank on every certificate.",
+    "Dates print the way they are shown in Excel, so format the column before you start.",
+    "A large logo inside the template is copied into every file and makes the whole set heavy."
+  ],
+  "explain": "We write the certificate once and let the asset list fill in the rest, so 200 certificates take seconds instead of days and nobody retypes a serial number.",
+  "effort": "an afternoon",
+  "image_url": "/certificates/before-after.png",
+  "credit": "This one has been built and tested on a made-up list of 200 assets."
+}
