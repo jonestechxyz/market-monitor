@@ -36,10 +36,11 @@ TIERS = {
     "medium": {"name": "Gemma 3", "tag": "gemma3:4b", "size": "3.4 GB", "runs_on": "most laptops from the last few years"},
 }
 
-CATEGORIES = ["money and bills", "work and email", "home and repairs", "cooking and food", "travel",
-              "learning something new", "health paperwork (not diagnosis)", "contracts and small print",
-              "writing and editing", "job hunting", "family and school", "tech support for yourself",
-              "languages", "planning and decisions"]
+CATEGORIES = ["bills and price rises", "renting and housing", "contracts and small print", "work and bosses",
+              "job hunting", "doctors and health letters (never diagnosis)", "insurance and claims",
+              "complaints and refunds", "scams and suspicious messages", "official letters and forms",
+              "big purchases and quotes", "difficult conversations", "money decisions (no investment advice)",
+              "family paperwork and care"]
 
 ART_STYLE = ("vintage instruction-manual illustration, two-colour risograph print in teal and orange on cream paper, "
              "clean isometric line drawing, no text, no letters")
@@ -72,28 +73,43 @@ def write_use(category: str, done: list[str]) -> dict | None:
             {"role": "user", "content": (
                 f"Today's area: {category}.\n"
                 f"Already covered, do not repeat or closely resemble:\n{avoid}\n\n"
-                "Pick one specific, practical task from ordinary daily life where the person pastes in some "
-                "text of their own (a letter, a bill, an email, a recipe, a leaflet, instructions) and the AI "
-                "does something useful with it. Nothing about technology, science papers, coding or AI itself. "
-                "It must not need the internet, today's news, or exact sums.\n\n"
+                "Pick one specific use that most people have NO IDEA an AI can do for them. The reader should "
+                "think 'I didn't know it could do that' and want to try it tonight. It must save real money, "
+                "time or worry, or give them the upper hand when dealing with a company, landlord, employer, "
+                "insurer, doctor or official. The person pastes in some text of their own and the AI does "
+                "something a clever, well-informed friend would do with it.\n"
+                "The level to aim for (do not copy these, invent a fresh one):\n"
+                "- Find the clause in a rental contract that could cost you your deposit\n"
+                "- Turn a hospital letter into the five questions to ask at your appointment\n"
+                "- Check a suspicious text message for the signs of a scam\n"
+                "- Spot what is missing from a builder's quote before you sign\n"
+                "- Draft a firm appeal against a parking fine using the notice's own wording\n"
+                "- See how your angry email will read to the person receiving it\n"
+                "REJECT anything a person could do themselves in two minutes: lists, shopping lists, plain "
+                "summaries, tidying text, bullet points. Nothing about technology, coding or AI itself. "
+                "It must not need the internet, today's news, or exact sums. Never present the AI as a "
+                "substitute for a lawyer or doctor: it helps the reader understand and prepare.\n\n"
                 "Return JSON with keys:\n"
-                '"title": the task as a short instruction, under 10 words, naming the specific everyday thing '
-                '(e.g. "Make sense of a confusing letter from the council", not "Summarise a document")\n'
-                '"why": two short sentences on how this helps, in everyday words\n'
-                f'"prompt": the exact words to paste to the AI, written as a clear plain-English request, '
-                f'containing {PLACEHOLDER} exactly once where the person\'s own text goes\n'
+                '"title": the task as a short instruction, under 11 words, naming the specific thing and the payoff\n'
+                '"why": two short sentences: the problem people have, and what this gets them\n'
+                f'"prompt": the exact words to paste to the AI. Make it a GOOD request, the kind most people '
+                f"never think to write: tell the AI who to act as, exactly what to look for, to quote the exact "
+                f"words it is relying on, and to say plainly when something is not in the text. Plain English. "
+                f'It must contain {PLACEHOLDER} exactly once where the person\'s own text goes\n'
+                '"trick": one or two short sentences explaining the one thing in those words that makes the '
+                'answer much better, so the reader learns something they can reuse\n'
                 f'"example_input": a realistic 60-120 word everyday example of what someone would paste in '
                 f"place of {PLACEHOLDER} (made up, no real people or companies)\n"
-                '"steps": 3 short steps for what to do with the answer once you have it. Do not explain how '
-                'to copy and paste\n'
-                '"watch_out": 2 or 3 specific mistakes the AI tends to make on this task, in everyday words\n'
-                '"privacy": one short sentence on what not to paste in (for example account numbers)\n'
+                '"steps": 3 short steps for what to do with the answer once you have it, including what to '
+                'double-check or who to show it to. Do not explain how to copy and paste\n'
+                '"watch_out": 2 or 3 specific mistakes the AI tends to make on this particular task, in everyday words\n'
+                '"privacy": one short sentence on what to remove from this particular kind of text before pasting it\n'
                 '"tier": "small" for a simple task, "medium" if it needs more careful reasoning\n'
                 '"image_prompt": one sentence describing a simple everyday scene that illustrates the task'
             )},
         ],
         temperature=0.8,
-        max_tokens=2000,
+        max_tokens=2800,
     )
     content = resp.choices[0].message.content or ""
     m = re.search(r"\{.*\}", content, re.DOTALL)
@@ -198,6 +214,10 @@ def build_html(d: dict, number: int, date_str: str, image: str, sample: tuple[st
     <div class="box plain" id="prompt">{e(d["prompt"])}</div>
     <button class="copy" data-copy="prompt">Copy these words</button>
     <p class="meta">Where it says {e(PLACEHOLDER)}, paste in your own. {e(d["privacy"])}</p>
+  </section>
+  <section>
+    <h3>Why these words work</h3>
+    <p>{e(d.get("trick", ""))}</p>
   </section>
   <section>
     <h3>Where to paste it</h3>
