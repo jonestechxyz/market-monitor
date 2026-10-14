@@ -232,6 +232,7 @@ def build_html(d: dict, number: int, date_str: str, image: str) -> str:
   <footer>{e(d.get("credit", "An idea written by an AI. It has not been built or tested, so treat it as a starting point."))}
     Project documents stay on your own computer. <a href="/archive/use/index.php">See them all</a></footer>
 </main>
+<script src="/use-chat.js?v=2" defer></script>
 </body>
 </html>"""
 
