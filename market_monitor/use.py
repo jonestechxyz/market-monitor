@@ -35,6 +35,32 @@ JOBS = ["certificates, declarations and other one-per-asset documents", "drawing
         "inspection and test records", "delivery notes and material tracking", "programme and progress reporting",
         "specifications, schedules and comparing document versions", "emails, filing and naming files consistently"]
 
+# The menu of ways to automate. Each morning several are brainstormed side by side and the most surprising wins;
+# anything used in the past week is off the table, so the column cannot settle into one trick.
+TECHNIQUES = {
+    "photo-reading": "the phone camera plus an AI on your own computer reading what is in photos: labels, nameplates, "
+                     "delivery notes, handwritten forms, gauges",
+    "photo-metadata": "the date, time and GPS position hidden inside every phone photo",
+    "qr-codes": "QR codes printed and stuck up on site, each opening the right document or form for that spot",
+    "public-data": "free public records joined to your own: official weather history, public holidays, daylight hours",
+    "self-checking-sheets": "spreadsheet rules that flag problems by themselves: colour warnings, cross-checks between "
+                            "sheets, totals that must agree",
+    "combine-many-files": "Excel pulling dozens of separate files from a folder into one table, refreshed with one click",
+    "compare-versions": "comparing two versions of a document or spreadsheet and showing only what changed",
+    "local-ai-reading": "an AI running on your own computer reading long documents and pulling out specific items, "
+                        "quoting the page",
+    "voice-to-records": "speaking notes into the phone and having them turned into structured, dated records",
+    "phone-shortcuts": "a one-tap shortcut on the phone that does several steps at once, such as photo, time, place "
+                       "and note saved together",
+    "calendar-reminders": "turning dates buried in documents into calendar reminders that warn you in advance",
+    "maps-and-plans": "placing things on a site plan or map automatically (snags, deliveries, photos) so patterns show",
+    "pdf-tools": "free tools that split, merge, stamp, number or pull pages out of PDFs in bulk",
+    "email-rules": "email rules and saved replies that sort, file and answer routine mail by themselves",
+    "model-quantities": "pulling quantities and schedules straight out of the 3D building model with a free viewer",
+}
+OVERDONE = ("filling a Word or Excel template once per row of a list (mail merge)",
+            "renaming, sorting or filing files using a lookup list")
+
 LISTS = ("how", "need", "watch_out")
 REQUIRED = ("title", "why", "idea", "before", "after", "person", "explain", "effort") + LISTS
 
@@ -42,15 +68,84 @@ ART_STYLE = ("vintage construction-manual illustration, two-colour risograph pri
              "clean isometric line drawing, no text, no letters")
 
 
-def past_titles(today: str) -> list[str]:
-    """Titles of earlier editions. Today's own file is left out so a re-run replaces it and keeps its number."""
+def past_editions(today: str) -> list[dict]:
+    """Earlier editions, oldest first, as {title, idea, technique}. Today's own file is left out so a re-run
+    replaces it and keeps its number. Only the last ten pages are opened to read their idea and technique."""
     try:
         page = requests.get(ARCHIVE + "index.php", timeout=20).content.decode("utf-8")
-        rows = re.findall(r'href="(Use-[\d-]+\.html)".*?class="t">(.*?)</div>', page, re.S)
-        return [html.unescape(t) for f, t in reversed(rows) if today not in f]
+        rows = [(f, html.unescape(t)) for f, t in reversed(re.findall(r'href="(Use-[\d-]+\.html)".*?class="t">(.*?)</div>', page, re.S))
+                if today not in f]
     except Exception as e:
         logger.warning("Could not read archive (%s) — assuming no past editions", e)
         return []
+    out = []
+    for i, (f, title) in enumerate(rows):
+        d = {"title": title, "idea": "", "technique": ""}
+        if i >= len(rows) - 10:
+            try:
+                s = requests.get(ARCHIVE + f, timeout=20).content.decode("utf-8")
+                m = re.search(r'<meta name="use-technique" content="([^"]*)"', s)
+                d["technique"] = m.group(1) if m else ""
+                m = re.search(r"The idea</h3>\s*<p>(.*?)</p>", s, re.S)
+                d["idea"] = html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip() if m else ""
+            except Exception:
+                pass
+        out.append(d)
+    return out
+
+
+def chat_json(system: str, user: str, max_tokens: int, temperature: float) -> dict | None:
+    resp = groq.chat.completions.create(model="openai/gpt-oss-120b", temperature=temperature, max_tokens=max_tokens,
+                                        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}])
+    content = resp.choices[0].message.content or ""
+    m = re.search(r"\{.*\}", content, re.DOTALL)
+    if not m:
+        logger.error("No JSON in Groq response: %s", content[:300])
+        return None
+    return json.loads(m.group(0))
+
+
+def pick_idea(job: str, past: list[dict], second_try: bool = False) -> dict | None:
+    """Brainstorm several ideas, each with a different technique, and judge them. Returns the winner."""
+    recent = {p["technique"] for p in past[-7:] if p["technique"]}
+    allowed = {k: v for k, v in TECHNIQUES.items() if k not in recent}
+    menu = "\n".join(f"- {k}: {v}" for k, v in allowed.items())
+    history = "\n".join(f"- {p['title']}" + (f" ({p['idea'][:160]})" if p["idea"] else "") for p in past[-40:]) or "(none yet)"
+    d = chat_json(
+        "You are the sharpest operations person in a European construction company: you know site paperwork inside out "
+        "and you know what ordinary computers and phones can quietly do. You hunt for automations that make experienced "
+        "site managers say 'I had no idea you could do that'. Return ONLY valid JSON.",
+        f"Area of paperwork today: {job}.\n\n"
+        f"Ideas already published (do not repeat their job OR their method):\n{history}\n\n"
+        f"These methods are overdone and are BANNED: {'; '.join(OVERDONE)}.\n\n"
+        f"Techniques you may use today:\n{menu}\n\n"
+        "Step 1: brainstorm 8 different ideas in today's area. Each must use a DIFFERENT technique from the list. Each must "
+        "solve a real, specific, recurring pain on European building projects, using free or common tools and nothing "
+        "that sends project documents to an online service.\n"
+        "Step 2: judge them hard. Score each 1-10 for SURPRISE (would a typical site manager already know this trick?) "
+        "and 1-10 for PAYOFF (hours or money saved, disputes won, mistakes caught). Be strict: a mail merge or a "
+        "spreadsheet lookup scores 2 for surprise.\n"
+        "Step 3: choose the idea with the best combined score that is honestly doable by a non-technical person with "
+        "at most one small program someone sets up once.\n\n"
+        'Return JSON: {"ideas":[{"title":"...","technique":"<one of the technique keys>","pitch":"one sentence",'
+        '"surprise":n,"payoff":n}], "choice": <index of the chosen idea>, "why_chosen": "one sentence"}',
+        1800, 1.0 if second_try else 0.95)
+    if not d or not d.get("ideas"):
+        return None
+    ideas = d["ideas"]
+    for i, x in enumerate(ideas):
+        logger.info("  idea %d [%s] s%s p%s: %s", i, x.get("technique"), x.get("surprise"), x.get("payoff"), x.get("title"))
+    if max((x.get("surprise") or 0) for x in ideas) < 7 and not second_try:
+        logger.info("No idea scored 7+ for surprise: brainstorming again")
+        return pick_idea(job, past, second_try=True)
+    try:
+        best = ideas[int(d.get("choice", 0))]
+    except (ValueError, IndexError):
+        best = max(ideas, key=lambda x: (x.get("surprise") or 0) + (x.get("payoff") or 0))
+    if best.get("technique") not in allowed:
+        logger.warning("Chosen idea used a technique outside today's menu (%s)", best.get("technique"))
+    logger.info("Chosen: %s — %s", best.get("title"), d.get("why_chosen", ""))
+    return best
 
 
 def normalise(d: dict) -> dict | None:
@@ -77,66 +172,42 @@ def normalise(d: dict) -> dict | None:
     return d
 
 
-def write_use(job: str, done: list[str]) -> dict | None:
-    avoid = "\n".join(f"- {t}" for t in done[-80:]) or "(none yet)"
-    resp = groq.chat.completions.create(
-        model="openai/gpt-oss-120b",
-        messages=[
-            {"role": "system", "content": (
-                "You write a daily column for people who work in construction in Europe: site managers, small "
-                "contractors, document controllers, estimators and project engineers. They know building "
-                "thoroughly and are NOT comfortable with technology. Each column takes one repetitive paperwork "
-                "job they do by hand and shows a practical way to make the computer do it. Write like a sharp "
-                "colleague explaining over coffee: short sentences, plain words, proper construction terms. "
-                "Never use these words: prompt, model, LLM, parameters, tokens, output, input, generate, API, "
-                "script, code, database, workflow, leverage. Say 'a small program' if one is needed, and 'the AI' "
-                "for an AI assistant. European setting: euros, metric units, dates as day-month-year. Do not name "
-                "or quote any law, regulation or contract clause number. Project documents are confidential, so "
-                "everything must run on the person's own computer, never an online service. Be honest about "
-                "limits. Return ONLY valid JSON."
-            )},
-            {"role": "user", "content": (
-                f"Today's kind of paperwork: {job}.\n"
-                f"Already covered, do not repeat or closely resemble:\n{avoid}\n\n"
-                "Pick ONE specific repetitive job in that area that eats hours on real projects and that most "
-                "people have no idea a computer can do for them. The reader should think 'that is three days of "
-                "my life every month'. Then give ONE practical way to automate it using things they already have "
-                "or can get free: Excel, Word, their folders of files, a small program someone sets up once, or "
-                "an AI running on their own computer. Choose the simplest method that works; do not use AI where "
-                "a spreadsheet and a template will do.\n"
-                "The level to aim for (do not copy these, invent a fresh one):\n"
-                "- Fill 200 certificates of conformity from the asset list, one Word file per asset\n"
-                "- Check every drawing in the folder against the register and list what is missing or superseded\n"
-                "- Turn one snag list into a separate, addressed list for each subcontractor\n"
-                "- Rename 500 site photos by date and location from where they were taken\n"
-                "- Compare two issues of a specification and list only what changed\n"
-                "REJECT anything vague ('use AI to be more productive') or anything that needs buying software.\n\n"
-                "Return JSON with keys:\n"
-                '"title": under 12 words, naming the job and the payoff, starting with a verb\n'
-                '"why": two short sentences on the job as it is done by hand today and what it costs\n'
-                '"idea": two or three short sentences giving the idea in plain words, so a director would get it\n'
-                '"how": a list of exactly 4 short steps describing how it works, from the files you start with '
-                'to the result. Describe what happens, not which buttons to press\n'
-                '"need": a list of 2 to 4 things you need to have ready (for example "the register as an Excel '
-                'sheet with one row per drawing")\n'
-                '"before": a tiny made-up example of what goes in: 3 or 4 short lines, invented European names\n'
-                '"after": what comes out for that example: 3 or 4 short lines\n'
-                '"person": one or two sentences on what a person must still check or decide\n'
-                '"watch_out": a list of 2 or 3 specific ways this goes wrong in practice\n'
-                '"explain": one sentence the reader could say to their boss or client to explain the idea\n'
-                '"effort": exactly one of "an afternoon", "a day or two", "a proper project"\n'
-                '"image_prompt": one sentence describing a simple site-office scene that illustrates the job'
-            )},
-        ],
-        temperature=0.8,
-        max_tokens=2800,
-    )
-    content = resp.choices[0].message.content or ""
-    m = re.search(r"\{.*\}", content, re.DOTALL)
-    if not m:
-        logger.error("No JSON in Groq response: %s", content[:300])
+def write_use(job: str, chosen: dict) -> dict | None:
+    technique = TECHNIQUES.get(chosen.get("technique", ""), chosen.get("technique", ""))
+    d = chat_json(
+        "You write a daily column for people who work in construction in Europe: site managers, small contractors, "
+        "document controllers, estimators and project engineers. They know building thoroughly and are NOT comfortable "
+        "with technology. Write like a sharp colleague explaining over coffee: short sentences, plain words, proper "
+        "construction terms. Never use these words: prompt, model, LLM, parameters, tokens, output, input, generate, "
+        "API, script, code, database, workflow, leverage. Say 'a small program' if one is needed, and 'the AI' for an "
+        "AI assistant. European setting: euros, metric units, dates as day-month-year. Do not name or quote any law, "
+        "regulation or contract clause number. Project documents are confidential, so nothing may send them to an "
+        "online service. Only describe features you are sure exist in free or common tools; where a step needs a small "
+        "program someone sets up once, say so plainly. Be honest about limits. Return ONLY valid JSON.",
+        f"Today's date: {datetime.now():%d-%m-%Y}. Area of paperwork: {job}.\n"
+        f"Today's idea, already chosen: {chosen.get('title')}. {chosen.get('pitch', '')}\n"
+        f"The technique it uses: {technique}.\n\n"
+        "Write this idea up as today's column. Make the surprising part obvious: the reader should finish thinking "
+        "'I had no idea you could do that'.\n\n"
+        "Return JSON with keys:\n"
+        '"title": under 12 words, naming the job and the payoff, starting with a verb\n'
+        '"why": two short sentences on the job as it is done by hand today and what it costs\n'
+        '"idea": two or three short sentences giving the idea in plain words, so a director would get it\n'
+        '"how": a list of exactly 4 short steps describing how it works, from what you start with to the result. '
+        'Describe what happens, not which buttons to press\n'
+        '"need": a list of 2 to 4 things you need to have ready\n'
+        '"before": a tiny made-up example of what goes in: 3 or 4 short lines, invented European names\n'
+        '"after": what comes out for that example: 3 or 4 short lines. The example must be consistent: dates, totals and statuses must agree with each other and with today\'s date\n'
+        '"person": one or two sentences on what a person must still check or decide\n'
+        '"watch_out": a list of 2 or 3 specific ways this goes wrong in practice\n'
+        '"explain": one sentence the reader could say to their boss or client to explain the idea\n'
+        '"effort": exactly one of "an afternoon", "a day or two", "a proper project"\n'
+        '"image_prompt": one sentence describing a simple site or site-office scene that illustrates the idea',
+        2800, 0.7)
+    if not d:
         return None
-    return normalise(json.loads(m.group(0)))
+    d["technique"] = chosen.get("technique", "")
+    return normalise(d)
 
 
 def build_html(d: dict, number: int, date_str: str, image: str) -> str:
@@ -150,6 +221,7 @@ def build_html(d: dict, number: int, date_str: str, image: str) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="use-technique" content="{e(d.get("technique", ""))}">
 <title>{e(d["title"])} — A Use a Day No. {number}</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono&display=swap" rel="stylesheet">
 <style>
@@ -259,9 +331,9 @@ def upload(live: Path, dated: Path):
 def main(dry_run: bool = False, featured: Path | None = None):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
-    done = past_titles(f"{now:%Y-%m-%d}")
+    past = past_editions(f"{now:%Y-%m-%d}")
     job = JOBS[now.timetuple().tm_yday % len(JOBS)]
-    logger.info("Use No. %d — area: %s", len(done) + 1, job)
+    logger.info("Use No. %d — area: %s", len(past) + 1, job)
 
     d = None
     if featured:
@@ -269,7 +341,8 @@ def main(dry_run: bool = False, featured: Path | None = None):
     else:
         for attempt in range(3):
             try:
-                d = write_use(job, done)
+                chosen = pick_idea(job, past)
+                d = write_use(job, chosen) if chosen else None
             except Exception as e:
                 logger.error("Groq attempt %d failed: %s", attempt + 1, e)
             if d:
@@ -282,7 +355,7 @@ def main(dry_run: bool = False, featured: Path | None = None):
     logger.info("Use: %s", d["title"])
 
     image = d.get("image_url") or generate_image_b64(d.get("image_prompt", ""), style=ART_STYLE)
-    page = build_html(d, len(done) + 1, now.strftime("%A %-d %B %Y"), image)
+    page = build_html(d, len(past) + 1, now.strftime("%A %-d %B %Y"), image)
     live, dated = OUT_DIR / "Use.html", OUT_DIR / f"Use-{now:%Y-%m-%d}.html"
     live.write_text(page, encoding="utf-8")
     dated.write_text(page, encoding="utf-8")
