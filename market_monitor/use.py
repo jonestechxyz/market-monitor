@@ -124,7 +124,18 @@ TECHNIQUES = {
     "compare-versions": "comparing two versions of a document or spreadsheet and showing only what changed",
     "pdf-tools": "free tools that split, merge, stamp, number or fill PDFs in bulk",
     "public-data": "free public information joined to your own: public holidays, weather history, opening hours",
+    "ai-scheduled-tasks": "an AI assistant (ChatGPT, Claude or Gemini) given a standing job that it runs by itself on "
+                          "a schedule and reports back on, for anything that isn't private",
+    "ai-builds-it": "asking ChatGPT, Claude or Gemini to write the small program or the phone shortcut for you, which "
+                    "then runs on your own computer or phone with your own files",
+    "local-ai-pipeline": "a chain set up once on your own computer: a local AI (Ollama or LM Studio) plus a free "
+                         "automation tool such as n8n, reading, sorting and drafting by itself on a timer",
+    "shortcuts-ai": "the iPhone's own AI inside a shortcut, summarising, sorting or rewriting text as part of a one-tap "
+                    "job",
 }
+# The techniques where an AI does the work. Every other day is an AI-automation day that must use one of these.
+AI_TECHNIQUES = {"local-ai-reading", "local-ai-watcher", "ai-scheduled-tasks", "ai-builds-it", "local-ai-pipeline",
+                 "shortcuts-ai"}
 OVERDONE = ("filling a Word or Excel template once per row of a list (mail merge)",
             "renaming, sorting or filing files using a lookup list")
 
@@ -154,6 +165,18 @@ TOOL_FACTS = (
     "pdftotext (free) pulls the text out of digitally made PDFs; scanned PDFs need OCR first (OCRmyPDF, free)",
     "ExifTool (free) reads the date, time and GPS position stored in every phone photo",
     "WinMerge (free) and Word's Compare show exactly what changed between two versions of a document",
+    "ChatGPT Tasks and Gemini scheduled actions run a request by themselves at set times (daily, weekly) and send "
+    "you the result, and they can search the web; they run online, so only for things that aren't private",
+    "Claude can run scheduled tasks too (in the Claude desktop app or Claude Code), and Claude Code can work with "
+    "files on your own computer",
+    "ChatGPT, Claude and Gemini will write a small program, an Excel formula or the exact steps of a phone shortcut "
+    "from a plain description; you run it yourself, so your files never leave your computer",
+    "Ollama and LM Studio (both free) run AI on an ordinary computer and let other programs use it as if it were "
+    "an online AI, with nothing leaving the machine",
+    "n8n (free, runs on your own computer) chains steps such as 'new email arrives, local AI reads it, add a row, "
+    "send a message' and runs them on a timer or when something happens",
+    "on iPhones with Apple Intelligence (iPhone 15 Pro and newer, iOS 26), the Shortcuts 'Use Model' action lets a "
+    "shortcut ask the phone's own AI to summarise, sort or rewrite text",
 )
 LISTS = ("how", "need", "watch_out")
 REQUIRED = ("title", "why", "idea", "before", "after", "person", "explain", "effort") + LISTS
@@ -208,7 +231,25 @@ OBVIOUS = ("a QR code that just opens a document or a form", "a shared spreadshe
            "a shared calendar")
 
 
-def brainstorm(job: str, past: list[dict], allowed: dict[str, str]) -> list[dict]:
+# The rule that shapes each day's ideas. Quick days are tricks anyone sets up alone; AI days put an AI to work on its own.
+QUICK_RULE = ("5. At least half the ideas must be something an ordinary person can set up alone in under an hour, with "
+              "no program at all, like a one-tap phone shortcut that photographs a problem, takes a spoken note and "
+              "emails both to a set address. Use an AI or a small program only where it does something a simple rule or "
+              "shortcut can't.\n")
+AI_RULE = ("5. Today is an AI-automation day: in every idea an AI does real work by itself once it is set up, using one "
+           f"of these techniques: {', '.join(sorted(AI_TECHNIQUES))}. Mix local AI on your own computer with assistants "
+           "like ChatGPT, Claude and Gemini running scheduled jobs or writing the program for you. Private documents go "
+           "only to a local AI; online assistants get only non-private material or write the tool that runs locally. "
+           "The AI must do something a simple rule couldn't: read meaning, summarise, draft, judge, compare.\n")
+QUICK_EASE = ("- ease: 10 = anyone sets it up alone in minutes with what is already on their phone or computer; 5 = needs "
+              "a helper for a day; 1 = a real software project. Mark down an AI or program doing what a plain rule could "
+              "do.\n")
+AI_EASE = ("- ease: 10 = an ordinary person sets it up in an evening, with ChatGPT, Claude or Gemini writing any program "
+           "for them; 5 = a capable helper needs a day or two; 1 = a real software project. Mark down an AI doing what a "
+           "plain rule could do.\n")
+
+
+def brainstorm(job: str, past: list[dict], allowed: dict[str, str], mode: str) -> list[dict]:
     """Eight candidate ideas, each starting from a specific costly moment and naming the little-known trick."""
     keys = list(allowed)
     random.shuffle(keys)  # menu order steered which techniques got used, so it changes daily
@@ -240,9 +281,7 @@ def brainstorm(job: str, past: list[dict], allowed: dict[str, str]) -> list[dict
         "4. Allowed and welcome: phone shortcuts and automations, an AI running locally on an ordinary computer (such "
         "as in LM Studio), small programs that run on a timer, read files or inboxes and email results to set people. "
         "Someone sets them up once; after that it just happens.\n"
-        "5. At least half the ideas must be something an ordinary person can set up alone in under an hour, with no "
-        "program at all, like a one-tap phone shortcut that photographs a problem, takes a spoken note and emails both "
-        "to a set address. Use an AI or a small program only where it does something a simple rule or shortcut can't.\n"
+        + (QUICK_RULE if mode == "quick" else AI_RULE) +
         "6. Use only the technique keys listed above. Use at least 6 different techniques across the 8 ideas, and do not start with whichever is listed first.\n"
         "7. The test: if an ordinary office worker could guess how it works from the title, it is not surprising enough. Aim for "
         "'I had no idea my phone or Excel could do that'.\n\n"
@@ -252,7 +291,7 @@ def brainstorm(job: str, past: list[dict], allowed: dict[str, str]) -> list[dict
     return [x for x in (d or {}).get("ideas", []) if isinstance(x, dict) and x.get("title")]
 
 
-def judge(job: str, ideas: list[dict]) -> list[dict]:
+def judge(job: str, ideas: list[dict], mode: str) -> list[dict]:
     """A separate, sceptical reader scores the ideas; the brainstormer never marks its own work."""
     order = list(range(len(ideas)))
     random.shuffle(order)
@@ -272,8 +311,7 @@ def judge(job: str, ideas: list[dict]) -> list[dict]:
         "(LM Studio) is normal and fully realistic: do NOT mark it down for that, or for a small "
         "program on a timer that reads files and sends emails, if a capable helper could set it up in a day or two. "
         "Mark down anything vague, made up, needing the cloud, or needing a team of developers.\n"
-        "- ease: 10 = anyone sets it up alone in minutes with what is already on their phone or computer; 5 = needs a "
-        "helper for a day; 1 = a real software project. Mark down an AI or program doing what a plain rule could do.\n"
+        + (QUICK_EASE if mode == "quick" else AI_EASE) +
         f"- on_topic: is it really about {job}? 10 = squarely, 1 = a different job.\n"
         "- sense: is the pain one you have actually seen at work, and does the fix match how people really work? "
         "10 = happens everywhere, every week; 1 = invented or nonsense, however clever it sounds.\n\n"
@@ -290,14 +328,18 @@ def judge(job: str, ideas: list[dict]) -> list[dict]:
     return out
 
 
-def pick_idea(job: str, past: list[dict]) -> dict | None:
+def pick_idea(job: str, past: list[dict], mode: str) -> dict | None:
     """Brainstorm, have the ideas judged separately, and keep the most surprising one that is real and pays off."""
     recent = {p["technique"] for p in past[-7:] if p["technique"]}
     allowed = {k: v for k, v in TECHNIQUES.items() if k not in recent}
+    if mode == "ai" and len(AI_TECHNIQUES & set(allowed)) < 3:  # AI days come every other day, so the week's ban
+        allowed.update({k: TECHNIQUES[k] for k in AI_TECHNIQUES})  # would soon leave nothing to choose from
     pool = []
     for round_ in range(2):
-        ideas = brainstorm(job, past, allowed)
-        scored = judge(job, ideas) if ideas else []
+        ideas = brainstorm(job, past, allowed, mode)
+        if mode == "ai":
+            ideas = [x for x in ideas if x.get("technique") in AI_TECHNIQUES]
+        scored = judge(job, ideas, mode) if ideas else []
         for x in scored:
             logger.info("  [%s] s%d p%d r%d e%d t%d n%d: %s (%s)", x.get("technique"), x["surprise"], x["payoff"],
                         x["real"], x["ease"], x["on_topic"], x["sense"], x["title"], x["comment"])
@@ -346,7 +388,7 @@ def write_use(job: str, chosen: dict) -> dict | None:
         "with technology. Write like a sharp colleague explaining over coffee: short sentences, plain words. "
         "Never use these words: prompt, model, LLM, parameters, tokens, output, input, generate, "
         "API, script, code, database, workflow, leverage. Say 'a small program' if one is needed, and 'the AI' for an "
-        "AI assistant. European setting: euros, metric units, dates as day-month-year. Do not name or quote any law, "
+        "AI assistant, or name ChatGPT, Claude or Gemini when the idea uses them. European setting: euros, metric units, dates as day-month-year. Do not name or quote any law, "
         "regulation or contract clause number. Private documents must never be uploaded to online AI or conversion "
         "websites; ordinary email is fine. Only describe features you are sure exist in free or common tools; where a step needs a small "
         "program someone sets up once, say so plainly. Be honest about limits. Return ONLY valid JSON.",
@@ -504,7 +546,8 @@ def main(dry_run: bool = False, featured: Path | None = None):
     now = datetime.now()
     past = past_editions(f"{now:%Y-%m-%d}")
     job = list(JOBS)[now.timetuple().tm_yday % len(JOBS)]
-    logger.info("Use No. %d — area: %s", len(past) + 1, job)
+    mode = os.getenv("USE_MODE") or ("ai" if now.timetuple().tm_yday % 2 == 0 else "quick")  # USE_MODE for tests
+    logger.info("Use No. %d — area: %s — %s day", len(past) + 1, job, mode)
     if os.getenv("GITHUB_EVENT_NAME") == "schedule" and not dry_run:
         try:  # GitHub's cron often fires hours late, after the Mac mini has already run it: keep the morning edition
             if requests.get(ARCHIVE + f"Use-{now:%Y-%m-%d}.html", timeout=20).status_code == 200:
@@ -519,7 +562,7 @@ def main(dry_run: bool = False, featured: Path | None = None):
     else:
         for attempt in range(3):
             try:
-                chosen = pick_idea(job, past)
+                chosen = pick_idea(job, past, mode)
                 d = write_use(job, chosen) if chosen else None
             except Exception as e:
                 logger.error("Groq attempt %d failed: %s", attempt + 1, e)
