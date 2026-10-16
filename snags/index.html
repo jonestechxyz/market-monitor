@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Snags">
+<meta name="theme-color" content="#12706a">
+<title>Snags</title>
+<style>
+  :root { --bg:#f6f1e4; --ink:#1e2a2a; --dim:#667370; --rule:#d4cbb4; --teal:#12706a; --orange:#d9622b; --box:#fffaf0; --red:#c8402f; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#101615; --ink:#e7e3d6; --dim:#93a09c; --rule:#2b3634; --teal:#4cc2b8; --orange:#f08a52; --box:#18201f; --red:#e5604d; }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width:900px; margin:0 auto; padding:calc(12px + env(safe-area-inset-top)) 14px 80px; }
+  header { display:flex; gap:10px; align-items:center; border-bottom:3px solid var(--teal); padding-bottom:8px; }
+  header b { letter-spacing:.14em; font-size:15px; color:var(--teal); }
+  header input { flex:1; min-width:0; font:inherit; font-weight:600; border:0; border-bottom:1px dashed var(--rule); background:transparent; color:var(--ink); padding:4px 2px; }
+  h2 { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--teal); margin:22px 0 8px; }
+  .private { color:var(--dim); font-size:13px; margin:6px 0 0; }
+  button, select, input, textarea { font:inherit; }
+  .b1 { background:var(--teal); color:var(--bg); border:0; border-radius:8px; padding:10px 14px; font-weight:600; cursor:pointer; }
+  .b2 { background:transparent; color:var(--teal); border:1px solid var(--teal); border-radius:8px; padding:9px 13px; font-weight:600; cursor:pointer; }
+  .b3 { background:transparent; color:var(--dim); border:1px solid var(--rule); border-radius:8px; padding:9px 13px; cursor:pointer; }
+  button:disabled { opacity:.45; cursor:default; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .tabs { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
+  .tab { flex:none; border:1px solid var(--rule); background:var(--box); color:var(--ink); border-radius:16px; padding:6px 12px; cursor:pointer; }
+  .tab.on { background:var(--teal); color:var(--bg); border-color:var(--teal); }
+  #viewer { position:relative; overflow:auto; border:1px solid var(--rule); background:#fff; max-height:70vh; margin-top:8px; touch-action:pan-x pan-y; }
+  #stage { position:relative; display:block; }
+  #planImg { display:block; width:100%; user-select:none; -webkit-user-select:none; cursor:crosshair; }
+  .pin { position:absolute; width:26px; height:26px; margin:-26px 0 0 -13px; border-radius:50% 50% 50% 0; transform:rotate(-45deg);
+         border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.5); cursor:pointer; }
+  .pin span { display:block; transform:rotate(45deg); color:#fff; font:700 11px/22px -apple-system, sans-serif; text-align:center; }
+  .pin.done { opacity:.45; }
+  .pin.flash { animation:flash 1.2s ease-in-out 3; }
+  @keyframes flash { 50% { box-shadow:0 0 0 10px rgba(229,96,77,.5); } }
+  .hint { color:var(--dim); font-size:14px; margin:6px 0 0; }
+  .empty { color:var(--dim); font-style:italic; padding:20px 0; text-align:center; }
+  .list .item { display:grid; grid-template-columns:34px 56px 1fr; gap:10px; align-items:center; border-bottom:1px solid var(--rule); padding:8px 0; cursor:pointer; }
+  .list .num { width:30px; height:30px; border-radius:50%; color:#fff; font:700 13px/30px sans-serif; text-align:center; }
+  .list img { width:56px; height:44px; object-fit:cover; border-radius:4px; background:var(--rule); }
+  .list .d { min-width:0; } .list .d b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .list .d small { color:var(--dim); }
+  .tag { display:inline-block; font-size:12px; border-radius:10px; padding:0 7px; border:1px solid var(--rule); margin-left:4px; }
+  .tag.High { border-color:var(--red); color:var(--red); } .tag.Done { border-color:var(--teal); color:var(--teal); }
+  dialog { border:0; border-radius:14px; padding:0; width:min(560px, 96vw); max-height:92vh; background:var(--bg); color:var(--ink); }
+  dialog::backdrop { background:rgba(0,0,0,.45); }
+  .sheet { padding:16px; display:grid; gap:10px; }
+  .sheet h3 { margin:0; }
+  .sheet label { display:grid; gap:3px; font-size:13px; color:var(--dim); }
+  .sheet input, .sheet select, .sheet textarea { padding:9px; border:1px solid var(--rule); border-radius:8px; background:var(--box); color:var(--ink); }
+  .sheet textarea { min-height:80px; resize:vertical; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .photos { display:flex; gap:8px; flex-wrap:wrap; }
+  .photos .ph { position:relative; } .photos img { width:96px; height:72px; object-fit:cover; border-radius:6px; display:block; }
+  .photos .ph button { position:absolute; top:-6px; right:-6px; width:22px; height:22px; border-radius:50%; border:0; background:var(--red); color:#fff; font-size:13px; line-height:22px; padding:0; }
+  #status { min-height:20px; font-size:14px; color:var(--dim); margin-top:8px; }
+  #reportOut { margin-top:10px; }
+</style>
+</head>
+<body>
+<main>
+  <header><b>SNAGS</b><input id="project" placeholder="Project name" aria-label="Project name"></header>
+  <p class="private">Everything stays on this phone until you send a report.</p>
+
+  <h2>Floor plans</h2>
+  <div class="row">
+    <div class="tabs" id="tabs"></div>
+    <button class="b2" id="addPlan">+ Add plan</button>
+    <input type="file" id="planFile" accept="image/*,application/pdf" hidden>
+  </div>
+  <div id="planArea"></div>
+
+  <h2>Snags</h2>
+  <div class="row">
+    <select id="filter" aria-label="Show"></select>
+    <span class="hint" id="counts"></span>
+  </div>
+  <div class="list" id="list"></div>
+
+  <h2>Send</h2>
+  <div class="row">
+    <button class="b1" id="make">Make report</button>
+    <span class="hint">Uses the filter above, so you can send each trade only their own snags.</span>
+  </div>
+  <div id="reportOut"></div>
+  <div id="status"></div>
+
+  <h2>Project file</h2>
+  <p class="private" style="margin-top:0">Snags live on this phone only. Save a project file now and then: clearing Safari's data, or losing the phone, loses them.</p>
+  <div class="row">
+    <button class="b2" id="save">Save project file</button>
+    <button class="b3" id="load">Load project file</button>
+    <button class="b3" id="wipe">Start a new project</button>
+    <input type="file" id="loadFile" accept=".json,application/json" hidden>
+  </div>
+</main>
+
+<dialog id="sheet"><form class="sheet" method="dialog" id="form">
+  <h3 id="sheetTitle">New snag</h3>
+  <div class="photos" id="photos"></div>
+  <div class="row">
+    <button type="button" class="b1" id="camera">Take photo</button>
+    <button type="button" class="b3" id="library">From library</button>
+    <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
+    <input type="file" id="libFile" accept="image/*" multiple hidden>
+  </div>
+  <label>What is wrong<textarea id="desc" placeholder="e.g. Plasterboard joint cracked above door, 300 mm"></textarea></label>
+  <div class="two">
+    <label>Trade<input id="trade" list="trades" placeholder="e.g. Drylining"></label>
+    <label>Priority<select id="priority"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+  </div>
+  <div class="two">
+    <label>Status<select id="state"><option>Open</option><option>Done</option></select></label>
+    <label>Fix by<input id="due" type="date"></label>
+  </div>
+  <datalist id="trades"></datalist>
+  <div class="row" style="justify-content:space-between">
+    <button type="button" class="b3" id="del">Delete</button>
+    <span class="row"><button type="button" class="b3" id="cancel">Cancel</button><button type="submit" class="b1" id="ok">Save snag</button></span>
+  </div>
+</form></dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script type="module">
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const say = t => $('status').textContent = t;
+const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/';
+const COLOURS = ['#c8402f', '#12706a', '#d98a1b', '#3b5bdb', '#8e44ad', '#2f9e44', '#c2255c', '#5c6b73'];
+// Each trade gets the next colour in turn, so up to eight trades never share one.
+let tradeOrder = [];
+const tradeColour = t => { const i = tradeOrder.indexOf(t || ''); return COLOURS[(i < 0 ? 0 : i) % COLOURS.length]; };
+const dmy = d => new Date(d).toLocaleDateString('en-GB').replace(/\//g, '-');
+
+// ── storage: IndexedDB, because photos are too big for anything else ─────────
+const db = await new Promise((ok, no) => {
+  const r = indexedDB.open('snags', 1);
+  r.onupgradeneeded = () => { for (const s of ['kv', 'plans', 'snags']) r.result.createObjectStore(s, s === 'kv' ? undefined : { keyPath: 'id' }); };
+  r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+});
+const tx = (store, mode, fn) => new Promise((ok, no) => {
+  const t = db.transaction(store, mode), s = t.objectStore(store), out = fn(s);
+  t.oncomplete = () => ok(out?.result); t.onerror = () => no(t.error);
+});
+const all = store => tx(store, 'readonly', s => s.getAll());
+const put = (store, v, k) => tx(store, 'readwrite', s => k === undefined ? s.put(v) : s.put(v, k));
+const del = (store, k) => tx(store, 'readwrite', s => s.delete(k));
+navigator.storage?.persist?.();
+
+let plans = [], snags = [], current = null, zoom = 1;
+const urls = new Map();
+const url = blob => { if (!urls.has(blob)) urls.set(blob, URL.createObjectURL(blob)); return urls.get(blob); };
+
+async function loadAll() {
+  plans = (await all('plans')).sort((a, b) => a.created - b.created);
+  snags = (await all('snags')).sort((a, b) => a.n - b.n);
+  tradeOrder = [...new Set(snags.slice().sort((a, b) => a.created - b.created).map(s => s.trade || ''))];
+  $('project').value = (await tx('kv', 'readonly', s => s.get('project'))) || '';
+  if (!plans.find(p => p.id === current)) current = plans[0]?.id || null;
+  render();
+}
+$('project').onchange = () => put('kv', $('project').value.trim(), 'project');
+
+// ── images: shrink photos and plans so reports fit in an email ───────────────
+async function shrink(blob, max, quality = .8) {
+  const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return { blob: await new Promise(r => c.toBlob(r, 'image/jpeg', quality)), w: c.width, h: c.height };
+}
+
+async function pdfPageToImage(file) {
+  const pdfjs = await import(PDFJS + 'pdf.min.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.mjs';
+  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  let n = 1;
+  if (doc.numPages > 1) n = Math.min(doc.numPages, Math.max(1, parseInt(prompt(`This PDF has ${doc.numPages} pages. Which page is the plan?`, '1'), 10) || 1));
+  const page = await doc.getPage(n), v1 = page.getViewport({ scale: 1 });
+  const vp = page.getViewport({ scale: Math.min(4, 2600 / Math.max(v1.width, v1.height)) });
+  const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvasContext: g, viewport: vp }).promise;
+  return new Promise(r => c.toBlob(r, 'image/jpeg', .85));
+}
+
+$('addPlan').onclick = () => $('planFile').click();
+$('planFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    say('Reading the plan…');
+    const src = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name) ? await pdfPageToImage(f) : f;
+    const img = await shrink(src, 2600, .85);
+    const name = (prompt('Name this plan (for example "Level 2")', f.name.replace(/\.[^.]+$/, '')) || 'Plan').trim();
+    const p = { id: crypto.randomUUID(), name, blob: img.blob, w: img.w, h: img.h, created: Date.now() };
+    await put('plans', p); current = p.id; zoom = 1; await loadAll(); say('Plan added. Tap it where a snag is.');
+  } catch (err) { console.error(err); say('Could not read that file: ' + err.message); }
+};
+
+// ── the plan viewer ──────────────────────────────────────────────────────────
+function render() {
+  $('tabs').innerHTML = plans.map(p => `<button class="tab ${p.id === current ? 'on' : ''}" data-plan="${p.id}">${esc(p.name)}</button>`).join('');
+  const p = plans.find(p => p.id === current);
+  if (!p) {
+    $('planArea').innerHTML = '<p class="empty">Add a floor plan to start: a photo, an image or a PDF from the architect.</p>';
+  } else {
+    $('planArea').innerHTML = `
+      <div class="row" style="margin-top:8px"><button class="b3" id="zout">−</button><button class="b3" id="zin">+</button>
+        <span class="hint" style="margin:0">Tap the plan where the snag is.</span>
+        <button class="b3" id="renamePlan" style="margin-left:auto">Rename</button><button class="b3" id="dropPlan">Remove plan</button></div>
+      <div id="viewer"><div id="stage"><img id="planImg" alt="${esc(p.name)}" src="${url(p.blob)}">${pinsHtml(p)}</div></div>`;
+    $('stage').style.width = (zoom * 100) + '%';
+    $('zin').onclick = () => setZoom(zoom * 1.5); $('zout').onclick = () => setZoom(zoom / 1.5);
+    $('planImg').onclick = e => {
+      const r = e.target.getBoundingClientRect();
+      openSheet({ planId: p.id, x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height });
+    };
+    $('renamePlan').onclick = async () => { const n = prompt('New name', p.name); if (n) { p.name = n.trim(); await put('plans', p); render(); } };
+    $('dropPlan').onclick = async () => {
+      const count = snags.filter(s => s.planId === p.id).length;
+      if (!confirm(`Remove "${p.name}"${count ? ` and its ${count} snags` : ''}? This cannot be undone.`)) return;
+      for (const s of snags.filter(s => s.planId === p.id)) await del('snags', s.id);
+      await del('plans', p.id); current = null; await loadAll();
+    };
+    $('stage').querySelectorAll('.pin').forEach(el => el.onclick = ev => { ev.stopPropagation(); openSheet(snags.find(s => s.id === el.dataset.id)); });
+  }
+  $('tabs').querySelectorAll('.tab').forEach(b => b.onclick = () => { current = b.dataset.plan; zoom = 1; render(); });
+  renderList();
+}
+function pinsHtml(p) {
+  return snags.filter(s => s.planId === p.id).map(s =>
+    `<div class="pin ${s.status === 'Done' ? 'done' : ''}" id="pin-${s.n}" data-id="${s.id}" style="left:${s.x * 100}%;top:${s.y * 100}%;background:${tradeColour(s.trade)}"><span>${s.n}</span></div>`).join('');
+}
+function setZoom(z) {
+  const v = $('viewer'), cx = (v.scrollLeft + v.clientWidth / 2) / v.scrollWidth, cy = (v.scrollTop + v.clientHeight / 2) / v.scrollHeight;
+  zoom = Math.min(5, Math.max(1, z)); $('stage').style.width = (zoom * 100) + '%';
+  v.scrollLeft = cx * v.scrollWidth - v.clientWidth / 2; v.scrollTop = cy * v.scrollHeight - v.clientHeight / 2;
+}
+
+// The "hyperlink": jump to a snag's plan, zoom in on its pin and make it flash.
+function showOnPlan(s) {
+  if (current !== s.planId) { current = s.planId; zoom = 1; render(); }
+  setZoom(2.5);
+  const v = $('viewer');
+  v.scrollLeft = s.x * v.scrollWidth - v.clientWidth / 2; v.scrollTop = s.y * v.scrollHeight - v.clientHeight / 2;
+  v.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const pin = $('pin-' + s.n); pin.classList.remove('flash'); void pin.offsetWidth; pin.classList.add('flash');
+}
+
+// ── the list ─────────────────────────────────────────────────────────────────
+function shown() { const f = $('filter').value; return snags.filter(s => !f || (f === '__open' ? s.status !== 'Done' : s.trade === f)); }
+function renderList() {
+  const trades = [...new Set(snags.map(s => s.trade).filter(Boolean))].sort();
+  const keep = $('filter').value;
+  $('filter').innerHTML = '<option value="">All snags</option><option value="__open">Open only</option>' + trades.map(t => `<option>${esc(t)}</option>`).join('');
+  $('filter').value = [...$('filter').options].some(o => o.value === keep) ? keep : '';
+  $('trades').innerHTML = trades.map(t => `<option value="${esc(t)}">`).join('');
+  const list = shown(), open = snags.filter(s => s.status !== 'Done').length;
+  $('counts').textContent = snags.length ? `${snags.length} snags, ${open} open` : '';
+  $('list').innerHTML = list.length ? list.map(s => {
+    const plan = plans.find(p => p.id === s.planId);
+    return `<div class="item" data-id="${s.id}"><div class="num" style="background:${tradeColour(s.trade)}">${s.n}</div>
+      ${s.photos[0] ? `<img src="${url(s.photos[0])}" alt="">` : '<img alt="">'}
+      <div class="d"><b>${esc(s.desc || '(no description)')}</b><small>${esc(s.trade || 'No trade')} · ${esc(plan?.name || '')}
+        <span class="tag ${s.priority}">${s.priority}</span>${s.status === 'Done' ? '<span class="tag Done">Done</span>' : ''}</small></div></div>`;
+  }).join('') : '<p class="empty">No snags yet. Tap the plan to add one.</p>';
+  $('list').querySelectorAll('.item').forEach(el => el.onclick = () => showOnPlan(snags.find(s => s.id === el.dataset.id)));
+}
+$('filter').onchange = renderList;
+
+// ── adding and editing a snag ────────────────────────────────────────────────
+let editing = null, photos = [];
+function openSheet(s) {
+  editing = s.id ? s : null;
+  const d = editing || { ...s, desc: '', trade: localStorage.getItem('snags-trade') || '', priority: 'Medium', status: 'Open', due: '', photos: [] };
+  editing = editing || null; photos = [...d.photos];
+  $('sheetTitle').textContent = s.id ? `Snag ${s.n}` : 'New snag';
+  $('desc').value = d.desc; $('trade').value = d.trade; $('priority').value = d.priority; $('state').value = d.status; $('due').value = d.due || '';
+  $('del').style.visibility = s.id ? 'visible' : 'hidden';
+  $('sheet').dataset.plan = d.planId; $('sheet').dataset.x = d.x; $('sheet').dataset.y = d.y;
+  drawPhotos(); $('sheet').showModal();
+}
+function drawPhotos() {
+  $('photos').innerHTML = photos.map((b, i) => `<div class="ph"><img src="${url(b)}" alt=""><button type="button" data-i="${i}" aria-label="Remove photo">×</button></div>`).join('');
+  $('photos').querySelectorAll('button').forEach(b => b.onclick = () => { photos.splice(+b.dataset.i, 1); drawPhotos(); });
+}
+async function addPhotos(files) {
+  for (const f of files) { try { photos.push((await shrink(f, 1600, .8)).blob); } catch (e) { console.error(e); } }
+  drawPhotos();
+}
+$('camera').onclick = () => $('camFile').click();
+$('library').onclick = () => $('libFile').click();
+$('camFile').onchange = e => { addPhotos([...e.target.files]); e.target.value = ''; };
+$('libFile').onchange = e => { addPhotos([...e.target.files]); e.target.value = ''; };
+$('cancel').onclick = () => $('sheet').close();
+$('form').onsubmit = async e => {
+  e.preventDefault();
+  const sh = $('sheet').dataset, now = Date.now();
+  const s = editing ? { ...editing } : { id: crypto.randomUUID(), n: Math.max(0, ...snags.map(x => x.n)) + 1, planId: sh.plan, x: +sh.x, y: +sh.y, created: now };
+  Object.assign(s, { desc: $('desc').value.trim(), trade: $('trade').value.trim(), priority: $('priority').value,
+                     status: $('state').value, due: $('due').value, photos, updated: now });
+  try { localStorage.setItem('snags-trade', s.trade); } catch {}
+  await put('snags', s); $('sheet').close(); await loadAll(); say(`Snag ${s.n} saved.`);
+};
+$('del').onclick = async () => {
+  if (!editing || !confirm(`Delete snag ${editing.n}? This cannot be undone.`)) return;
+  await del('snags', editing.id); $('sheet').close(); await loadAll(); say('Snag deleted.');
+};
+
+// ── the report: a PDF to send by mail ────────────────────────────────────────
+const blobToDataURL = b => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); });
+async function planWithPins(plan, list, maxW = 2000) {
+  const bmp = await createImageBitmap(plan.blob), k = Math.min(1, maxW / bmp.width);
+  const c = document.createElement('canvas'); c.width = bmp.width * k; c.height = bmp.height * k;
+  const g = c.getContext('2d'); g.drawImage(bmp, 0, 0, c.width, c.height);
+  const r = Math.max(16, c.width / 55);
+  for (const s of list) {
+    const x = s.x * c.width, y = s.y * c.height;
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = tradeColour(s.trade); g.fill(); g.lineWidth = r / 5; g.strokeStyle = '#fff'; g.stroke();
+    g.fillStyle = '#fff'; g.font = `bold ${r * 1.1}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(s.n, x, y + 1);
+  }
+  return c;
+}
+function cropAround(canvas, s, frac = .42) {
+  const w = canvas.width * frac, h = w * .75, x = Math.min(Math.max(0, s.x * canvas.width - w / 2), canvas.width - w), y = Math.min(Math.max(0, s.y * canvas.height - h / 2), canvas.height - h);
+  const c = document.createElement('canvas'); c.width = 600; c.height = 450;
+  const g = c.getContext('2d'); g.drawImage(canvas, x, y, w, h, 0, 0, 600, 450);
+  // A ring round the pin, so it stands out in the close-up.
+  const px = (s.x * canvas.width - x) / w * 600, py = (s.y * canvas.height - y) / h * 450;
+  g.beginPath(); g.arc(px, py, 46, 0, 7); g.lineWidth = 6; g.strokeStyle = '#c8402f'; g.stroke();
+  return c.toDataURL('image/jpeg', .8);
+}
+
+$('make').onclick = async () => {
+  const list = shown();
+  if (!list.length) return say('There are no snags to put in the report.');
+  $('make').disabled = true; say('Making the report…');
+  try {
+    const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' }), W = 210, H = 297, M = 14;
+    const project = $('project').value.trim() || 'Project', filter = $('filter').selectedOptions[0].text, today = dmy(Date.now());
+    const usedPlans = plans.filter(p => list.some(s => s.planId === p.id));
+    // The index fits 29 lines on the first page and 33 on each page after, matching the layout below.
+    const coverPages = list.length <= 29 ? 1 : 1 + Math.ceil((list.length - 29) / 33);
+    const planPage = Object.fromEntries(usedPlans.map((p, i) => [p.id, coverPages + 1 + i]));
+    const snagPage = Object.fromEntries(list.map((s, i) => [s.id, coverPages + usedPlans.length + 1 + Math.floor(i / 2)]));
+
+    // Cover and index: each line links to that snag's page.
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.text('Snag report', M, 24);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+    doc.text(`${project}  ·  ${today}  ·  ${filter}`, M, 32);
+    doc.text(`${list.length} snags, ${list.filter(s => s.status !== 'Done').length} open. Tap a line to jump to it.`, M, 39);
+    let y = 50, page = 1;
+    for (const s of list) {
+      if (y > H - 16) { doc.addPage(); page++; y = 20; }
+      const plan = plans.find(p => p.id === s.planId);
+      doc.setFillColor(tradeColour(s.trade)); doc.circle(M + 3, y - 1.4, 3, 'F');
+      doc.setTextColor(255); doc.setFontSize(8); doc.text(String(s.n), M + 3, y - 0.4, { align: 'center' });
+      doc.setTextColor(0); doc.setFontSize(10);
+      const line = `${(s.desc || '(no description)').slice(0, 70)}  —  ${s.trade || 'No trade'}, ${plan?.name || ''}${s.status === 'Done' ? ', done' : ''}`;
+      doc.textWithLink(line, M + 9, y, { pageNumber: snagPage[s.id] });
+      y += 8;
+    }
+    while (page < coverPages) { doc.addPage(); page++; }
+
+    // One page per plan, with numbered pins.
+    const planCanvas = {};
+    for (const p of usedPlans) {
+      doc.addPage();
+      const c = await planWithPins(p, list.filter(s => s.planId === p.id)); planCanvas[p.id] = c;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text(p.name, M, 18);
+      const k = Math.min((W - 2 * M) / c.width, (H - 40) / c.height);
+      doc.addImage(c.toDataURL('image/jpeg', .8), 'JPEG', M, 24, c.width * k, c.height * k);
+    }
+
+    // Two snags per page: photo, details, and the plan around the pin.
+    for (const [i, s] of list.entries()) {
+      if (i % 2 === 0) doc.addPage();
+      const top = i % 2 === 0 ? 14 : 152, plan = plans.find(p => p.id === s.planId);
+      doc.setFillColor(tradeColour(s.trade)); doc.circle(M + 5, top + 5, 5, 'F');
+      doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(String(s.n), M + 5, top + 6.5, { align: 'center' });
+      doc.setTextColor(0); doc.setFontSize(13);
+      doc.text(doc.splitTextToSize(s.desc || '(no description)', W - 2 * M - 14).slice(0, 2), M + 14, top + 6.5);
+      if (s.photos[0]) {
+        const img = await createImageBitmap(s.photos[0]), k = Math.min(100 / img.width, 75 / img.height);
+        doc.addImage(await blobToDataURL(s.photos[0]), 'JPEG', M, top + 18, img.width * k, img.height * k);
+      }
+      doc.addImage(cropAround(planCanvas[s.planId], s), 'JPEG', W - M - 72, top + 18, 72, 54);
+      doc.setDrawColor(150); doc.setLineWidth(.3); doc.rect(W - M - 72, top + 18, 72, 54);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      const facts = [`Trade: ${s.trade || '—'}`, `Priority: ${s.priority}`, `Status: ${s.status}`, s.due ? `Fix by: ${dmy(s.due)}` : null,
+                     `Location: ${plan?.name || ''}`, `Recorded: ${dmy(s.created)}`].filter(Boolean);
+      facts.forEach((f, j) => doc.text(f, W - M - 72, top + 80 + j * 5.5));
+      doc.setTextColor(18, 112, 106); doc.textWithLink('Show on the plan', W - M - 72, top + 80 + facts.length * 5.5 + 2, { pageNumber: planPage[s.planId] });
+      doc.setTextColor(0);
+      if (s.photos.length > 1) { doc.setFontSize(9); doc.text(`+ ${s.photos.length - 1} more photo(s) on the phone`, M, top + 98); }
+    }
+
+    const name = `Snags_${project.replace(/[^\w-]+/g, '-')}_${filter.replace(/[^\w-]+/g, '-')}_${today}.pdf`;
+    const blob = doc.output('blob'), file = new File([blob], name, { type: 'application/pdf' }), link = URL.createObjectURL(blob);
+    $('reportOut').innerHTML = `<div class="row"><button class="b1" id="send">Send by mail</button><a class="b3" href="${link}" download="${esc(name)}" style="text-decoration:none">Save PDF</a>
+      <span class="hint">${(blob.size / 1e6).toFixed(1)} MB, ${doc.getNumberOfPages()} pages</span></div>`;
+    $('send').onclick = async () => {
+      const text = `${project}: ${list.length} snags (${filter}). Report attached.`;
+      if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: name, text }); } catch {} }
+      else { const a = document.createElement('a'); a.href = link; a.download = name; a.click();
+             location.href = `mailto:?subject=${encodeURIComponent('Snag report: ' + project)}&body=${encodeURIComponent(text + '\n\n(The PDF was saved to your downloads: attach it to this email.)')}`; }
+    };
+    say(blob.size > 20e6 ? 'Report ready, but it is large for email. Send it per trade to make it smaller.' : 'Report ready.');
+  } catch (e) { console.error(e); say('Could not make the report: ' + e.message); }
+  $('make').disabled = false;
+};
+
+// ── project file ─────────────────────────────────────────────────────────────
+$('save').onclick = async () => {
+  say('Packing the project…');
+  const pack = { app: 'snags', saved: new Date().toISOString(), project: $('project').value,
+    plans: await Promise.all(plans.map(async p => ({ ...p, blob: await blobToDataURL(p.blob) }))),
+    snags: await Promise.all(snags.map(async s => ({ ...s, photos: await Promise.all(s.photos.map(blobToDataURL)) }))) };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(pack)], { type: 'application/json' }));
+  a.download = `snags_${($('project').value || 'project').replace(/[^\w-]+/g, '-')}_${dmy(Date.now())}.json`; a.click();
+  say('Project file saved.');
+};
+$('load').onclick = () => $('loadFile').click();
+$('loadFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const pack = JSON.parse(await f.text());
+    if (pack.app !== 'snags') throw new Error('not a snag project file');
+    if ((plans.length || snags.length) && !confirm('Replace everything on this phone with the project in this file?')) return;
+    const toBlob = async d => (await fetch(d)).blob();
+    await tx('plans', 'readwrite', s => s.clear()); await tx('snags', 'readwrite', s => s.clear());
+    for (const p of pack.plans) await put('plans', { ...p, blob: await toBlob(p.blob) });
+    for (const s of pack.snags) await put('snags', { ...s, photos: await Promise.all(s.photos.map(toBlob)) });
+    await put('kv', pack.project || '', 'project'); current = null; await loadAll();
+    say(`Loaded ${pack.plans.length} plans and ${pack.snags.length} snags.`);
+  } catch (err) { say('Could not load that file: ' + err.message); }
+};
+$('wipe').onclick = async () => {
+  if (!confirm('Delete every plan and snag on this phone? Save a project file first if you want to keep them.')) return;
+  await tx('plans', 'readwrite', s => s.clear()); await tx('snags', 'readwrite', s => s.clear()); await put('kv', '', 'project');
+  current = null; await loadAll(); say('Started a new project.');
+};
+
+await loadAll();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
