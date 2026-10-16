@@ -13,6 +13,7 @@ import html
 import json
 import logging
 import os
+import random
 import re
 import time
 from datetime import datetime
@@ -34,6 +35,60 @@ JOBS = ["certificates, declarations and other one-per-asset documents", "drawing
         "meeting minutes and action tracking", "requests for information and technical queries",
         "inspection and test records", "delivery notes and material tracking", "programme and progress reporting",
         "specifications, schedules and comparing document versions", "emails, filing and naming files consistently"]
+
+# Real, known-costly failures in each area. The brainstorm attacks these instead of inventing pains of its own,
+# which is how it ended up with clever-sounding nonsense.
+PAINS = {
+    "certificates": ["handover held up because a few test certificates are missing and nobody knows which",
+                     "certificates issued against the wrong serial numbers or room references",
+                     "fire-stopping and fire-door certificates that don't match what was actually installed"],
+    "drawing": ["a crew builds to revision C because the site set was never updated after D was issued",
+                "the transmittal says revision D but the PDF title block still shows C",
+                "a consultant reissues a drawing with changed content and the same revision letter",
+                "the as-built set is incomplete at handover and nobody can say which drawings are missing"],
+    "transmittals": ["a subcontractor swears they never received a drawing and there's no proof they did",
+                     "documents go out to the wrong distribution list or an old one",
+                     "nobody notices that a consultant hasn't returned comments within the agreed period"],
+    "snag": ["the same snag is logged three times by three people with different wording",
+             "snags marked closed that were never fixed, found by the client at handover",
+             "subcontractors argue a snag isn't theirs and there's no record of when it appeared"],
+    "photos": ["thousands of site photos nobody can search when a dispute needs proof of a date",
+               "no photo of the services before the ceiling was closed up",
+               "progress photos that can't be tied to a location or a programme activity"],
+    "handover": ["O&M manuals arrive late, incomplete or for the wrong product",
+                 "warranty start dates nobody recorded, so claims are refused",
+                 "the handover pack is checked by hand against a list, page by page"],
+    "quotes": ["tender returns compared in a hurry and an exclusion buried in a cover letter is missed",
+               "quotes priced on an old drawing revision",
+               "quote validity runs out before the order is placed"],
+    "invoices": ["an invoice paid twice, or paid for work that was never approved",
+                 "a payment application claims more than the measured work",
+                 "retention and payment deadlines missed, leading to interest or a dispute"],
+    "timesheets": ["plant on hire for weeks after it was last used",
+                   "labour returns that don't match the gate log or the daywork sheets",
+                   "dayworks signed late or never, so they can't be claimed"],
+    "minutes": ["actions agreed in a meeting that nobody follows up until they are critical",
+                "a decision made in a meeting that later can't be proved",
+                "the same issue carried for ten meetings without an owner"],
+    "requests for information": ["an RFI unanswered for weeks while the work waits, with no record of the delay",
+                                 "the same question asked twice to different consultants with different answers",
+                                 "an RFI answer that changes the design but never reaches the drawings"],
+    "inspection": ["work covered up before it was inspected",
+                   "inspection records filled in after the fact and not trusted",
+                   "a failed test re-done but the retest never recorded"],
+    "delivery": ["materials delivered short or damaged and signed for as complete",
+                 "deliveries that can't be matched to an order when the invoice arrives",
+                 "material certificates for concrete or steel that never reach the quality file"],
+    "programme": ["the progress report written from memory on Friday afternoon",
+                  "delays not recorded when they happen, so they can't be claimed later",
+                  "the programme says 60% done but nobody can show why"],
+    "specifications": ["a changed clause in a reissued specification that nobody spots",
+                       "the installed product doesn't match the specification and it's found at handover",
+                       "two documents disagree and nobody notices until the work is done"],
+    "emails": ["an instruction given by email that is lost when the dispute starts",
+               "a key email sitting in one person's inbox when they go on holiday",
+               "files named so differently that nobody can find the latest version"],
+}
 
 # The menu of ways to automate. Each morning several are brainstormed side by side and the most surprising wins;
 # anything used in the past week is off the table, so the column cannot settle into one trick.
@@ -57,10 +112,31 @@ TECHNIQUES = {
     "pdf-tools": "free tools that split, merge, stamp, number or pull pages out of PDFs in bulk",
     "email-rules": "email rules and saved replies that sort, file and answer routine mail by themselves",
     "model-quantities": "pulling quantities and schedules straight out of the 3D building model with a free viewer",
+    "local-ai-watcher": "an AI running on an office computer (for example in LM Studio) that checks a folder or "
+                        "inbox on a timer, reads each new file and emails the right person what it found",
+    "auto-doc-control": "a small program on a timer that does document control by itself: checks revisions, "
+                        "spots superseded or missing drawings, files them and emails a summary to set people",
+    "scheduled-mail": "a timed job that reads files or registers overnight and sends each person their own short "
+                      "email: what is due, what changed, what is missing",
 }
 OVERDONE = ("filling a Word or Excel template once per row of a list (mail merge)",
             "renaming, sorting or filing files using a lookup list")
 
+# Things these tools really do. Left to itself the AI credits tools with abilities they don't have (a PDF splitter
+# "reading the title block"), so ideas are built from this list or from facts just as certain.
+TOOL_FACTS = (
+    "pdftotext (free, Poppler) pulls the text out of digitally made PDFs, title blocks included; scanned PDFs need "
+    "OCR first (OCRmyPDF or Tesseract, both free)",
+    "LM Studio runs an AI on an ordinary office computer with nothing sent online; a small program can hand it text "
+    "or an image (a title block, a delivery note, a photo) and get back the fields it reads",
+    "Windows Task Scheduler (or launchd on a Mac) runs a small program every night or every hour by itself",
+    "a small program can watch a folder or a mailbox, and send emails through the company mail server to set people",
+    "Excel Power Query's 'From Folder' lists every file in a folder with its name and dates, refreshed in one click",
+    "ExifTool (free) reads the date, time and GPS position stored in every phone photo",
+    "iPhone Shortcuts and Android automations can save a photo with time, place and a spoken note in one tap",
+    "WinMerge (free) and Excel's Spreadsheet Compare show exactly what changed between two versions of a file",
+    "free BIM viewers such as BIMcollab Zoom or Solibri Anywhere open IFC models and list element quantities",
+)
 LISTS = ("how", "need", "watch_out")
 REQUIRED = ("title", "why", "idea", "before", "after", "person", "explain", "effort") + LISTS
 
@@ -94,8 +170,9 @@ def past_editions(today: str) -> list[dict]:
     return out
 
 
-def chat_json(system: str, user: str, max_tokens: int, temperature: float) -> dict | None:
+def chat_json(system: str, user: str, max_tokens: int, temperature: float, effort: str = "medium") -> dict | None:
     resp = groq.chat.completions.create(model="openai/gpt-oss-120b", temperature=temperature, max_tokens=max_tokens,
+                                        reasoning_effort=effort,
                                         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}])
     content = resp.choices[0].message.content or ""
     m = re.search(r"\{.*\}", content, re.DOTALL)
@@ -105,46 +182,110 @@ def chat_json(system: str, user: str, max_tokens: int, temperature: float) -> di
     return json.loads(m.group(0))
 
 
-def pick_idea(job: str, past: list[dict], second_try: bool = False) -> dict | None:
-    """Brainstorm several ideas, each with a different technique, and judge them. Returns the winner."""
-    recent = {p["technique"] for p in past[-7:] if p["technique"]}
-    allowed = {k: v for k, v in TECHNIQUES.items() if k not in recent}
-    menu = "\n".join(f"- {k}: {v}" for k, v in allowed.items())
+# Tricks every site manager already knows. Ideas built on them read as bland, so the brainstorm is told to avoid them
+# and the judge marks them down.
+OBVIOUS = ("a QR code that just opens a document or a form", "a shared spreadsheet or register on a shared drive",
+           "colour-coding a spreadsheet", "a cloud folder or shared link", "taking photos and filing them by date",
+           "a checklist app", "a template", "sending reminders by email")
+
+
+def brainstorm(job: str, past: list[dict], allowed: dict[str, str]) -> list[dict]:
+    """Eight candidate ideas, each starting from a specific costly moment and naming the little-known trick."""
+    keys = list(allowed)
+    random.shuffle(keys)  # menu order steered which techniques got used, so it changes daily
+    menu = "\n".join(f"- {k}: {allowed[k]}" for k in keys)
+    pains = next((v for k, v in PAINS.items() if k in job), [])
+    pain_list = "\n".join(f"- {x}" for x in pains) or "(choose your own)"
     history = "\n".join(f"- {p['title']}" + (f" ({p['idea'][:160]})" if p["idea"] else "") for p in past[-40:]) or "(none yet)"
     d = chat_json(
-        "You are the sharpest operations person in a European construction company: you know site paperwork inside out "
-        "and you know what ordinary computers and phones can quietly do. You hunt for automations that make experienced "
-        "site managers say 'I had no idea you could do that'. Return ONLY valid JSON.",
+        "You are the sharpest operations person in a European construction company: twenty years on site, then the "
+        "person everyone asks how to get the computer to do the boring part. You know the little-known features hidden in "
+        "Excel, Windows, iPhone and Android, free PDF tools and free BIM viewers, and the specific moments on a project "
+        "where paperwork quietly costs thousands of euros. Return ONLY valid JSON.",
         f"Area of paperwork today: {job}.\n\n"
         f"Ideas already published (do not repeat their job OR their method):\n{history}\n\n"
-        f"These methods are overdone and are BANNED: {'; '.join(OVERDONE)}.\n\n"
-        f"Techniques you may use today:\n{menu}\n\n"
-        "Step 1: brainstorm 8 different ideas in today's area. Each must use a DIFFERENT technique from the list. Each must "
-        "solve a real, specific, recurring pain on European building projects, using free or common tools and nothing "
-        "that sends project documents to an online service.\n"
-        "Step 2: judge them hard. Score each 1-10 for SURPRISE (would a typical site manager already know this trick?) "
-        "and 1-10 for PAYOFF (hours or money saved, disputes won, mistakes caught). Be strict: a mail merge or a "
-        "spreadsheet lookup scores 2 for surprise.\n"
-        "Step 3: choose the idea with the best combined score that is honestly doable by a non-technical person with "
-        "at most one small program someone sets up once.\n\n"
-        'Return JSON: {"ideas":[{"title":"...","technique":"<one of the technique keys>","pitch":"one sentence",'
-        '"surprise":n,"payoff":n}], "choice": <index of the chosen idea>, "why_chosen": "one sentence"}',
-        1800, 1.0 if second_try else 0.95)
-    if not d or not d.get("ideas"):
+        f"BANNED methods, overdone in this column: {'; '.join(OVERDONE)}.\n"
+        f"Everyone already knows these, so an idea that rests on them is worthless: {'; '.join(OBVIOUS)}.\n\n"
+        f"Real, costly failures in this area that people know well:\n{pain_list}\n\n"
+        f"Techniques to draw on (in no particular order):\n{menu}\n\n"
+        "Tool facts you can rely on:\n" + "\n".join(f"- {x}" for x in TOOL_FACTS) + "\n"
+        "Never credit a tool with something it cannot do. Build on these facts, or on others you are equally sure of.\n\n"
+        "Brainstorm 8 ideas in today's area. Rules:\n"
+        "1. Start each idea from a PAIN: preferably one of the failures listed above, or one just as real and well "
+        "known. Say who it hurts and roughly what it costs in euros or days. Do not invent unusual situations.\n"
+        "2. Then the TRICK: the specific, little-known capability that fixes it, named precisely enough that someone "
+        "could look it up (the feature, the tool, what it does). It must be real and exist today in free or common "
+        "tools, and nothing may send project documents to an online service. An idea may combine two techniques.\n"
+        "3. Every idea must be about today's area of paperwork, not some other job.\n"
+        "4. Allowed and welcome: an AI running locally on an office computer (such as in LM Studio), small programs "
+        "that run on a timer, read files or inboxes, do document control by themselves and email results to set people. "
+        "Someone sets them up once; after that the site team just gets the emails.\n"
+        "5. Use at least 6 different techniques across the 8 ideas, and do not start with whichever is listed first.\n"
+        "6. The test: if a site manager could guess how it works from the title, it is not surprising enough. Aim for "
+        "'I had no idea my phone or Excel could do that'.\n\n"
+        'Return JSON: {"ideas":[{"title":"...","technique":"<technique key>","pain":"one or two sentences",'
+        '"trick":"one or two sentences","pitch":"one sentence"}]}',
+        6000, 1.0, "medium")
+    return [x for x in (d or {}).get("ideas", []) if isinstance(x, dict) and x.get("title")]
+
+
+def judge(job: str, ideas: list[dict]) -> list[dict]:
+    """A separate, sceptical reader scores the ideas; the brainstormer never marks its own work."""
+    order = list(range(len(ideas)))
+    random.shuffle(order)
+    listing = "\n".join(f"[{i}] {ideas[i]['title']}\n    Pain: {ideas[i].get('pain', '')}\n    Trick: {ideas[i].get('trick', '')}"
+                         for i in order)
+    d = chat_json(
+        "You are a hard-bitten European site manager with thirty years on jobs and no patience for gadgets. Salesmen "
+        "have shown you every app, QR sticker and cloud platform there is. You score ideas honestly and harshly. "
+        "Return ONLY valid JSON.",
+        f"Area of paperwork: {job}. Score each idea below.\n\n{listing}\n\n"
+        "Score each 1-10 for:\n"
+        "- surprise: would you, or a typical site manager, already know this trick? 10 = never heard of it and it is "
+        f"clever; 2 = obvious. Anything resting on these scores 3 at most: {'; '.join(OBVIOUS)}.\n"
+        "- payoff: money, days or disputes it saves on a normal project, judged from the pain described.\n"
+        "- real: does the trick truly exist today in free or common tools, and does it keep project documents off "
+        "online services? The readers already run AI locally on ordinary office computers (LM Studio), so a local AI "
+        "reading PDFs, drawings or emails is normal and fully realistic: do NOT mark it down for that, or for a small "
+        "program on a timer that reads files and sends emails, if a capable helper could set it up in a day or two. "
+        "Mark down anything vague, made up, needing the cloud, or needing a team of developers.\n"
+        f"- on_topic: is it really about {job}? 10 = squarely, 1 = a different job.\n"
+        "- sense: is the pain one you have actually seen on real jobs, and does the fix match how projects really "
+        "run? 10 = happens on every job; 1 = invented or nonsense, however clever it sounds.\n\n"
+        'Return JSON: {"scores":[{"id":n,"surprise":n,"payoff":n,"real":n,"on_topic":n,"sense":n,"comment":"a few words"}]}',
+        3500, 0.2, "medium")
+    out = []
+    for sc in (d or {}).get("scores", []):
+        try:
+            idea = dict(ideas[int(sc["id"])])
+            idea.update({k: int(sc.get(k) or 0) for k in ("surprise", "payoff", "real", "on_topic", "sense")}, comment=sc.get("comment", ""))
+            out.append(idea)
+        except (KeyError, ValueError, IndexError, TypeError):
+            continue
+    return out
+
+
+def pick_idea(job: str, past: list[dict]) -> dict | None:
+    """Brainstorm, have the ideas judged separately, and keep the most surprising one that is real and pays off."""
+    recent = {p["technique"] for p in past[-7:] if p["technique"]}
+    allowed = {k: v for k, v in TECHNIQUES.items() if k not in recent}
+    pool = []
+    for round_ in range(2):
+        ideas = brainstorm(job, past, allowed)
+        scored = judge(job, ideas) if ideas else []
+        for x in scored:
+            logger.info("  [%s] s%d p%d r%d t%d n%d: %s (%s)", x.get("technique"), x["surprise"], x["payoff"], x["real"],
+                        x["on_topic"], x["sense"], x["title"], x["comment"])
+        pool += [x for x in scored if x["real"] >= 7 and x["payoff"] >= 5 and x["on_topic"] >= 8 and x["sense"] >= 7]
+        if any(x["surprise"] >= 7 for x in pool):
+            break
+        logger.info("Nothing scored 7+ for surprise while staying real: brainstorming again")
+    if not pool:
         return None
-    ideas = d["ideas"]
-    for i, x in enumerate(ideas):
-        logger.info("  idea %d [%s] s%s p%s: %s", i, x.get("technique"), x.get("surprise"), x.get("payoff"), x.get("title"))
-    if max((x.get("surprise") or 0) for x in ideas) < 7 and not second_try:
-        logger.info("No idea scored 7+ for surprise: brainstorming again")
-        return pick_idea(job, past, second_try=True)
-    try:
-        best = ideas[int(d.get("choice", 0))]
-    except (ValueError, IndexError):
-        best = max(ideas, key=lambda x: (x.get("surprise") or 0) + (x.get("payoff") or 0))
+    best = max(pool, key=lambda x: (x["surprise"] * 2 + x["payoff"] + x["sense"], x["real"]))
     if best.get("technique") not in allowed:
         logger.warning("Chosen idea used a technique outside today's menu (%s)", best.get("technique"))
-    logger.info("Chosen: %s — %s", best.get("title"), d.get("why_chosen", ""))
+    logger.info("Chosen: %s", best["title"])
     return best
 
 
@@ -186,12 +327,17 @@ def write_use(job: str, chosen: dict) -> dict | None:
         "program someone sets up once, say so plainly. Be honest about limits. Return ONLY valid JSON.",
         f"Today's date: {datetime.now():%d-%m-%Y}. Area of paperwork: {job}.\n"
         f"Today's idea, already chosen: {chosen.get('title')}. {chosen.get('pitch', '')}\n"
-        f"The technique it uses: {technique}.\n\n"
-        "Write this idea up as today's column. Make the surprising part obvious: the reader should finish thinking "
-        "'I had no idea you could do that'.\n\n"
+        f"The pain it fixes: {chosen.get('pain', '')}\n"
+        f"The little-known trick: {chosen.get('trick', '')}\n"
+        f"The technique it uses: {technique}.\n"
+        "Tool facts you can rely on (never claim a tool does more than this):\n" + "\n".join(f"- {x}" for x in TOOL_FACTS) + "\n\n"
+        "Write this idea up as today's column. Keep the pain and the trick specific: name the actual feature or tool, "
+        "and put the trick up front, because it is the reason anyone reads this. The reader should finish thinking "
+        "'I had no idea you could do that'. Never fall back on vague claims like saving time, streamlining, "
+        "efficiency, instantly or seamlessly: say what changes, with a number.\n\n"
         "Return JSON with keys:\n"
-        '"title": under 12 words, naming the job and the payoff, starting with a verb\n'
-        '"why": two short sentences on the job as it is done by hand today and what it costs\n'
+        '"title": under 12 words that give away the surprising trick, so the headline alone is worth reading\n'
+        '"why": two short sentences: the specific moment it goes wrong today, and what that costs in euros or days\n'
         '"idea": two or three short sentences giving the idea in plain words, so a director would get it\n'
         '"how": a list of exactly 4 short steps describing how it works, from what you start with to the result. '
         'Describe what happens, not which buttons to press\n'
@@ -203,7 +349,7 @@ def write_use(job: str, chosen: dict) -> dict | None:
         '"explain": one sentence the reader could say to their boss or client to explain the idea\n'
         '"effort": exactly one of "an afternoon", "a day or two", "a proper project"\n'
         '"image_prompt": one sentence describing a simple site or site-office scene that illustrates the idea',
-        2800, 0.7)
+        4000, 0.7)
     if not d:
         return None
     d["technique"] = chosen.get("technique", "")
@@ -334,6 +480,13 @@ def main(dry_run: bool = False, featured: Path | None = None):
     past = past_editions(f"{now:%Y-%m-%d}")
     job = JOBS[now.timetuple().tm_yday % len(JOBS)]
     logger.info("Use No. %d — area: %s", len(past) + 1, job)
+    if os.getenv("GITHUB_EVENT_NAME") == "schedule" and not dry_run:
+        try:  # GitHub's cron often fires hours late, after the Mac mini has already run it: keep the morning edition
+            if requests.get(ARCHIVE + f"Use-{now:%Y-%m-%d}.html", timeout=20).status_code == 200:
+                logger.info("Today's edition is already published — late scheduled run, nothing to do")
+                return
+        except requests.RequestException:
+            pass
 
     d = None
     if featured:
