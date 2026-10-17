@@ -1,8 +1,8 @@
 name: Signal — Daily Futurology
 
 on:
-  schedule:
-    - cron: '0 7 * * *'   # 07:00 UTC daily
+  # Started by the Mac mini's clock (~/bin/daily-pages.sh); GitHub's own timer ran late
+  # and made pages twice. Watchdog is the backup if the mini is off.
   workflow_dispatch:
 
 jobs:

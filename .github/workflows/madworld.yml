@@ -1,10 +1,9 @@
 name: MAD World Daily Satire
 
 on:
-  schedule:
-    # 09:00 UTC daily — fresh absurdity every morning
-    - cron: "0 9 * * *"
-  workflow_dispatch:  # allow manual runs from the Actions tab
+  # Started by the Mac mini's clock (~/bin/daily-pages.sh); GitHub's own timer ran late
+  # and made pages twice. Watchdog is the backup if the mini is off.
+  workflow_dispatch:
 
 jobs:
   build-and-publish:

@@ -1,12 +1,17 @@
 name: DJT Truth Social Watcher
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"   # every 15 minutes
+  # Started every 15 minutes by the Mac mini (~/bin/djt-watch.sh); GitHub's own
+  # 15-minute timer only managed about 6 runs a day.
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# One at a time, so two runs never push the saved state over each other.
+concurrency:
+  group: djt-watcher
+  cancel-in-progress: false
 
 jobs:
   watch:

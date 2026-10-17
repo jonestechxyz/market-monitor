@@ -1,11 +1,9 @@
 name: Asia-EU Market Monitor
 
 on:
-  schedule:
-    # 06:00 CET = 05:00 UTC (winter) / 04:00 UTC (summer)
-    # Running at 05:00 UTC covers both CET and CEST windows before EU open.
-    - cron: "0 4 * * 1-5"
-  workflow_dispatch:  # allow manual runs from the Actions tab
+  # Started by the Mac mini's clock (~/bin/daily-pages.sh); GitHub's own timer ran late
+  # and made pages twice. Watchdog is the backup if the mini is off.
+  workflow_dispatch:
 
 permissions:
   contents: write

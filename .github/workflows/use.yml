@@ -1,8 +1,8 @@
 name: A Use a Day
 
 on:
-  schedule:
-    - cron: "30 6 * * *"
+  # Started by the Mac mini's clock (~/bin/daily-pages.sh); GitHub's own timer ran late
+  # and made pages twice. Watchdog is the backup if the mini is off.
   workflow_dispatch:
 
 jobs:

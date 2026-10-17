@@ -1,13 +1,9 @@
 name: AIWorld Daily — Marvel & Panic
 
 on:
-  schedule:
-    # 02:07 UTC daily — live before 6am Denmark time year-round.
-    # DK is UTC+1 (winter) / UTC+2 (summer), so 6am DK = 04:00–05:00 UTC;
-    # 02:07 leaves a buffer for GitHub Actions' scheduling lag. Off-the-hour
-    # minute (:07) tends to start more promptly than :00.
-    - cron: "7 2 * * *"
-  workflow_dispatch:  # allow manual runs from the Actions tab
+  # Started by the Mac mini's clock (~/bin/daily-pages.sh); GitHub's own timer ran late
+  # and made pages twice. Watchdog is the backup if the mini is off.
+  workflow_dispatch:
 
 jobs:
   build-and-publish:
