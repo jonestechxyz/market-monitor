@@ -1,0 +1,34 @@
+{
+  "category": "make your own phone tool with an AI agent",
+  "title": "Describe the phone tool you want, and an AI agent builds it and puts it online",
+  "why": "Every asset needs twenty photos and the photos need to end up filed under the right asset number. On the phone they sit mixed in with everything else, and sorting, renaming and emailing them is an evening's work.",
+  "idea": "Describe the tool in one plain sentence to an AI coding agent, such as Claude Code, Codex or Gemini CLI, running on your own computer. It writes a small web page that works on the phone and uploads it to your own website. Here the result is Asset Snap: photograph the asset tag and the phone reads the number, take the equipment photos, tap Send, and one email arrives with the asset number as the subject and all the photos in a zip.",
+  "try_url": "/asset.html",
+  "try_label": "Open Asset Snap on your phone",
+  "how": [
+    "Open the AI agent on your computer, in the folder where you keep your website files.",
+    "Type what you want as you'd say it to a colleague: what you photograph, what it should read, where the email goes and what the subject should be.",
+    "The agent writes the phone page and a small mail script for your web host, tests them on the computer and asks before it uploads anything.",
+    "You open the link on your phone and use it. If something is wrong, tell the agent in plain words, for example \"it only let me take 2 pictures\", and it finds the cause, fixes it and uploads it again.",
+    "Once it works, add it to your phone's home screen so it opens like an app."
+  ],
+  "need": [
+    "An AI coding agent on your computer: Claude Code, OpenAI Codex or Gemini CLI, on a paid plan",
+    "A website you can upload to, with the FTP login from your web host. Most cheap hosting plans can send email.",
+    "The address the emails should go to. Put it in the mail script, not on the page, so nobody else can use your page to send mail.",
+    "Ten minutes to describe the tool and then try it on the real phone a few times"
+  ],
+  "before": "What was typed to the agent:\n\n\"can i set up a page that i can use on my iphone, i open camera and take a picture of the asset tag, then proceed to take maybe 20+ pictures of the equipment, it scans the text on the asset tag and sends email with zipped folder of pictures and subject will be the asset name\"",
+  "after": "A live page: jonestech.xyz/asset.html\n\nIn the inbox:\nSubject: GEN-04521\nAttached: GEN-04521.zip\n  GEN-04521_tag.jpg\n  GEN-04521_01.jpg … _22.jpg\n\nThe first version stopped after 2 photos. One sentence back to the agent, and it found the cause and uploaded a fix.",
+  "person": "You decide what the tool should do, check the asset number before each send, and say when something is wrong on the phone. The agent can't stand on site, so the first real test is yours.",
+  "watch_out": [
+    "Phone web pages are tighter on memory than real apps. Test with a full job of 20 or more photos, not just two, before you rely on it.",
+    "The tag reader guesses from the photo. Scratched, curved or shiny tags can come out wrong, so check the number before you send.",
+    "Photos go through your web host by email. For private client sites, ask the agent to send them to a company inbox, and keep the photos smaller so they fit.",
+    "Agents ask before uploading to your live site. Read what it is about to upload before you say yes."
+  ],
+  "explain": "I described the tool I wanted in one sentence, an AI agent built it and put it on our website, and now a tag photo and twenty equipment photos arrive as one email under the asset number.",
+  "effort": "one morning",
+  "image_url": "/archive/use/asset-snap.jpg",
+  "credit": "Built this morning by asking an AI agent. Tested with made-up tags and a simulated camera. The first try on an iPhone stopped after 2 photos; that is fixed but not yet re-checked on the phone."
+}

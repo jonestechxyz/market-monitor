@@ -130,14 +130,18 @@ TECHNIQUES = {
                     "then runs on your own computer or phone with your own files",
     "local-ai-pipeline": "a chain set up once on your own computer: a local AI (Ollama or LM Studio) plus a free "
                          "automation tool such as n8n, reading, sorting and drafting by itself on a timer",
+    "agent-builds-page": "telling an AI coding agent (Claude Code, Codex or Gemini CLI) in one plain sentence what phone "
+                         "tool you wish existed; it writes a small web page for it and puts it on your own website, "
+                         "opened from the phone's home screen like an app",
     "shortcuts-ai": "the iPhone's own AI inside a shortcut, summarising, sorting or rewriting text as part of a one-tap "
                     "job",
 }
 # The techniques where an AI does the work. Every other day is an AI-automation day that must use one of these.
 AI_TECHNIQUES = {"local-ai-reading", "local-ai-watcher", "ai-scheduled-tasks", "ai-builds-it", "local-ai-pipeline",
-                 "shortcuts-ai"}
+                 "shortcuts-ai", "agent-builds-page"}
 OVERDONE = ("filling a Word or Excel template once per row of a list (mail merge)",
-            "renaming, sorting or filing files using a lookup list")
+            "renaming, sorting or filing files using a lookup list",
+            "photographing an asset tag and emailing the equipment photos zipped (built in No. 8)")
 
 # Things these tools really do. Left to itself the AI credits tools with abilities they don't have (a PDF splitter
 # "reading the title block"), so ideas are built from this list or from facts just as certain.
@@ -177,6 +181,16 @@ TOOL_FACTS = (
     "send a message' and runs them on a timer or when something happens",
     "on iPhones with Apple Intelligence (iPhone 15 Pro and newer, iOS 26), the Shortcuts 'Use Model' action lets a "
     "shortcut ask the phone's own AI to summarise, sort or rewrite text",
+    "AI coding agents (Claude Code, OpenAI Codex, Gemini CLI) run on your own computer, write a working web page from a "
+    "plain description, test it, and upload it to your website when given its FTP login, asking before they upload; "
+    "when you report a problem in plain words they find the cause and upload a fix",
+    "a web page opened in the phone's browser can use the camera, read printed text in a photo (Tesseract, on the "
+    "phone itself), pack photos into a zip, remember unsent work, and be added to the home screen; it is slower and "
+    "tighter on memory than a real app, so it must be tested on the real phone with a full day's job",
+    "an ordinary cheap web host can run a small script (PHP) that emails what the page sends it, with attachments, "
+    "to an address fixed in the script so strangers can't use it to send mail",
+    "example already built this way: Asset Snap (jonestech.xyz/asset.html) photographs an asset tag, reads the "
+    "number, takes 20+ equipment photos and emails them zipped with the asset number as the subject",
 )
 LISTS = ("how", "need", "watch_out")
 REQUIRED = ("title", "why", "idea", "before", "after", "person", "explain", "effort") + LISTS
