@@ -509,7 +509,10 @@ def write_use(job: str, chosen: dict, news: dict | None = None) -> dict | None:
            f"What is new: {news.get('what_new', '')}\n"
            f"The article says: {news.get('text') or '(could not be read: rely only on the headline)'}\n"
            "Describe the new feature ONLY as the article describes it. If the article does not say it is available "
-           "in Europe, or on which devices, tell the reader to check. Lead with what is new, then how to use it at work.\n"
+           "in Europe, or on which devices, tell the reader to check. Lead with what is new, then how to use it at work. "
+           "Name a menu, button, setting or time limit ONLY if the article itself names it; otherwise say 'look for the new "
+           "... option'. Never say how long something lasts or how it behaves unless the article says so. New features "
+           "often reach phones gradually, so add that it may not be on everyone's phone yet.\n"
            if news else "")
         + "Tool facts you can rely on (never claim a tool does more than this):\n" + "\n".join(f"- {x}" for x in TOOL_FACTS) + "\n\n"
         + "Write this idea up as today's column. Keep the pain and the trick specific: name the actual feature or tool, "
