@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
-PUSHOVER_USER  = "uwb6u3d6hqvcynmthjbwa1g6wyxhzo"
-PUSHOVER_TOKEN = "afgjsjzi2gx7uitk9ty6275mq9ddd4"
+PUSHOVER_USER  = os.getenv("PUSHOVER_USER", "")
+PUSHOVER_TOKEN = os.getenv("PUSHOVER_TOKEN", "")
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
 
 POLL_INTERVAL  = 300  # seconds (5 min)

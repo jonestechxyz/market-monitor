@@ -51,7 +51,8 @@ def groq_analyse(post_text: str) -> str:
     """Return a short market/geopolitical analysis of a DJT post."""
     try:
         resp = groq.chat.completions.create(
-            model="groq/compound",
+            # groq/compound was retired; gpt-oss-120b is what the daily pages use.
+            model="openai/gpt-oss-120b",
             messages=[
                 {
                     "role": "system",
@@ -64,8 +65,10 @@ def groq_analyse(post_text: str) -> str:
                 },
                 {"role": "user", "content": post_text},
             ],
-            max_tokens=250,
+            # gpt-oss thinks before answering; keep that short and leave room for the answer.
+            max_tokens=800,
             temperature=0.4,
+            extra_body={"reasoning_effort": "low"},
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
@@ -122,7 +125,13 @@ def save_seen_id(post_id: str):
 
 def build_email(posts: list[dict]) -> tuple[str, str, str]:
     count = len(posts)
-    subject = f"🇺🇸 DJT Truth Social Alert — {count} new {'story' if count == 1 else 'stories'}"
+    # The headline goes in the subject so each alert is its own conversation in Gmail
+    # (identical subjects were being stacked into one old thread) and reads at a glance.
+    headline = posts[0]["title"]
+    if len(headline) > 90:
+        headline = headline[:87].rstrip() + "..."
+    more = f" (+{count - 1} more)" if count > 1 else ""
+    subject = f"DJT Truth Social: {headline}{more}"
 
     plain_lines = []
     html_parts = []
