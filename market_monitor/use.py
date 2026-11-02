@@ -433,7 +433,8 @@ def pick_news(items: list[dict], past: list[dict]) -> dict | None:
         "1-10: new (genuinely new this week), useful (saves real time or money at work), real (usable today by an "
         "ordinary person, without waiting or paying much).\n"
         'Return JSON: {"candidates":[{"n":0,"what_new":"","use_at_work":"","new":0,"useful":0,"real":0}]}',
-        1800, 0.3, effort="high")
+        # Thinking counts against max_tokens on this model, so leave plenty of room for the answer itself.
+        6000, 0.3, effort="medium")
     cands = []
     for c in (d or {}).get("candidates", []):
         try:
