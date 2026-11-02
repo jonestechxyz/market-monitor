@@ -1,0 +1,11 @@
+# This repo is public: never commit passwords, keys or private data.
+.env
+*.env
+.credentials.json
+
+# Logs, caches and local state
+*.log
+__pycache__/
+.DS_Store
+.venv/
+market_monitor/.seen_posts.json
