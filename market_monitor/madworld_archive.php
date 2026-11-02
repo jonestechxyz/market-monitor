@@ -14,6 +14,10 @@ foreach ($files as $f) {
         ];
     }
 }
+require_once dirname(__DIR__) . '/headlines.php';
+$heads = edition_headlines(__DIR__, 'MadWorld', $files);
+foreach ($editions as &$e) { $e['headline'] = $heads[$e['file']] ?? ''; }
+unset($e);
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -149,6 +153,8 @@ foreach ($files as $f) {
     color: var(--yellow);
   }
   .edition-date { font-size: 15px; }
+  .edition-headline { display: block; font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 17px; letter-spacing: .01em; color: var(--yellow); line-height: 1.25; margin-bottom: 2px; }
+  .edition-list a:hover .edition-headline { color: var(--yellow2); }
   .edition-arrow {
     font-family: 'Oswald', sans-serif;
     font-size: 11px;
@@ -209,7 +215,7 @@ foreach ($by_year as $year => $items):
     <?php foreach ($items as $e): ?>
     <li>
       <a href="<?= htmlspecialchars($e['file']) ?>">
-        <span class="edition-date"><?= $e['label'] ?></span>
+        <span class="edition-date"><?php if ($e['headline']): ?><span class="edition-headline"><?= htmlspecialchars($e['headline']) ?></span><?php endif; ?><?= $e['label'] ?></span>
         <span class="edition-arrow">READ →</span>
       </a>
     </li>

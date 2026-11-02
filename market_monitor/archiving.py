@@ -77,6 +77,7 @@ def install_indexes(ftp, base: str, series: str):
         _put(ftp, "index.php", (HERE / "archive_series.php").read_bytes())
     _cd(ftp, f"{base}/archive")
     _put(ftp, "index.php", (HERE / "archive_hub.php").read_bytes())
+    _put(ftp, "headlines.php", (HERE / "archive_headlines.php").read_bytes())
 
 
 def publish(series: str, local_path: Path, copy: bool = True):

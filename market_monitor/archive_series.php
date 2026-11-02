@@ -21,6 +21,10 @@ foreach (glob(__DIR__ . '/' . $prefix . '-????-??-??.html') as $f) {
   $rows[] = ['file' => basename($f), 'ts' => $ts, 'about' => $about];
 }
 usort($rows, fn($a, $b) => $b['ts'] <=> $a['ts']);
+require_once dirname(__DIR__) . '/headlines.php';
+$heads = edition_headlines(__DIR__, $prefix, array_map(fn($r) => __DIR__ . '/' . $r['file'], $rows));
+foreach ($rows as &$r) { if (!empty($heads[$r['file']])) $r['about'] = $heads[$r['file']]; }
+unset($r);
 ?><!DOCTYPE html>
 <html lang="en">
 <head>

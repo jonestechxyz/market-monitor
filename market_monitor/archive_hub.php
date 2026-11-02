@@ -10,12 +10,14 @@ $SERIES = [
   ['aiart', 'Life in 2050', 'AiArt.html', 'AiArt', 'A daily gallery of AI pictures of the future'],
   ['brief', 'Daily Brief', 'daily.html', 'Brief', 'Markets and news before the European open'],
 ];
+require_once __DIR__ . '/headlines.php';
 $rows = [];
 foreach ($SERIES as [$key, $name, $live, $prefix, $blurb]) {
   $files = glob(__DIR__ . "/$key/$prefix-????-??-??.html") ?: [];
   rsort($files);
   $latest = $files ? preg_replace('/^.*-(\d{4})-(\d{2})-(\d{2})\.html$/', '$3-$2-$1', $files[0]) : '';
-  $rows[] = compact('key', 'name', 'live', 'blurb', 'latest') + ['count' => count($files)];
+  $head = $files ? (edition_headlines(dirname($files[0]), $prefix, [$files[0]])[basename($files[0])] ?? '') : '';
+  $rows[] = compact('key', 'name', 'live', 'blurb', 'latest', 'head') + ['count' => count($files)];
 }
 ?><!DOCTYPE html>
 <html lang="en">
@@ -35,6 +37,7 @@ foreach ($SERIES as [$key, $name, $live, $prefix, $blurb]) {
   .card p { margin:4px 0 8px; color:var(--dim); }
   .card .links a { color:var(--accent); font-weight:600; margin-right:16px; text-decoration:none; }
   .meta { font-size:14px; color:var(--dim); }
+  .card p.latest { color:var(--ink); font-weight:600; margin:8px 0 4px; }
 </style>
 </head>
 <body>
@@ -46,6 +49,7 @@ foreach ($SERIES as [$key, $name, $live, $prefix, $blurb]) {
     <h2><?= htmlspecialchars($r['name']) ?></h2>
     <p><?= htmlspecialchars($r['blurb']) ?></p>
     <div class="links"><a href="/<?= htmlspecialchars($r['live']) ?>">Today's</a><a href="/archive/<?= $r['key'] ?>/index.php">Past editions</a></div>
+    <?php if ($r['head']): ?><p class="latest">Latest: <?= htmlspecialchars($r['head']) ?></p><?php endif; ?>
     <div class="meta"><?= $r['count'] ?> archived<?= $r['latest'] ? ' · latest ' . $r['latest'] : '' ?></div>
   </div>
   <?php endforeach; ?>
