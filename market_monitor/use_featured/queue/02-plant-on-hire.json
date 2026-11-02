@@ -1,0 +1,30 @@
+{
+  "category": "plant and equipment",
+  "technique": "self-checking-sheets",
+  "title": "Find the hired machines nobody has used this week",
+  "why": "A telehandler or a generator sits behind the cabins for two weeks after its job is done, and the hire bill keeps running. Nobody notices until the invoice arrives, and by then the money is spent.",
+  "idea": "Put the hire log and the site diary in the same spreadsheet. A formula counts, for each machine on hire, the days since the diary last mentioned it. Anything quiet for five working days turns red: off-hire it or find it a job.",
+  "how": [
+    "Keep the hire log as one sheet: machine, supplier, hire number, on-hire date, off-hire date if returned.",
+    "Keep the site diary as another sheet, one line per entry, and mention machines by the same short name.",
+    "For each machine still on hire, a formula finds the last diary date that mentions it and counts the working days since.",
+    "Conditional formatting turns the row red at five quiet days, so the list for Monday's call to the hire company writes itself."
+  ],
+  "need": [
+    "The hire log with on-hire dates",
+    "A site diary in a spreadsheet, using one agreed name per machine",
+    "Five minutes on a Monday to look at the red rows"
+  ],
+  "before": "Hire: Telehandler TH-2 (on 06-10-2026), Generator G-4 (on 13-10-2026)\nDiary 20-10: 'TH-2 lifting blocks level 2'\nDiary 22-10: 'G-4 running welder'",
+  "after": "TH-2: last used 20-10-2026, 9 working days ago → RED\nG-4: last used 22-10-2026, 7 working days ago → RED\nIdle hire at about €95 a day: roughly €1,500 so far",
+  "person": "A person checks whether a quiet machine is really idle or just missing from the diary, and whether it is needed again soon enough to keep.",
+  "watch_out": [
+    "It only works if the diary uses the same name for each machine every time.",
+    "Machines kept on standby on purpose (a pump during wet weather) will show red; mark them as standby.",
+    "Weekly or monthly hire rates change the saving, so check the hire terms before off-hiring."
+  ],
+  "explain": "Our spreadsheet compares the hire log with the site diary and flags any machine nobody has mentioned for a week, so we stop paying for idle plant.",
+  "effort": "an afternoon",
+  "image_prompt": "a parked telehandler and a generator behind site cabins, a clipboard with a red-flagged list",
+  "credit": "Written by hand for this column."
+}

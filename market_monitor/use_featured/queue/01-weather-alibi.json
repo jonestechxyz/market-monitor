@@ -1,0 +1,30 @@
+{
+  "category": "delays and claims",
+  "technique": "public-data",
+  "title": "Let the official weather record write your delay evidence",
+  "why": "Months after a wet February you need to prove which days were lost to wind and rain, and the site diary just says 'weather'. Without official figures, a claim for those days is your word against the client's.",
+  "idea": "DMI, the Danish weather service, publishes the weather for every day at its stations for free. Put each day's wind, rain and frost next to your programme in one sheet, and every lost day is backed by an official record before anyone asks.",
+  "how": [
+    "Find the DMI weather station nearest the site in DMI's free weather archive.",
+    "Copy the daily figures for the period (highest wind gust, rainfall, lowest temperature) into a sheet, one row per day.",
+    "Next to each day, a simple rule marks it as a likely lost day for your trades, for example gusts over 15 m/s for crane work, or frost for concreting.",
+    "Line those days up against the site diary, so each lost day has both your note and the official figure."
+  ],
+  "need": [
+    "The site's location and the nearest DMI station",
+    "The limits that stop your work, from your method statements or crane plan",
+    "Your site diary for the same days"
+  ],
+  "before": "03-02-2026  Diary: 'Crane stood down, wind'\n04-02-2026  Diary: 'Weather'\n05-02-2026  Diary: (nothing)",
+  "after": "03-02-2026  Gust 21 m/s → crane day lost ✔\n04-02-2026  Rain 18 mm, gust 12 m/s → groundworks lost ✔\n05-02-2026  Gust 17 m/s → crane day lost, missing from diary ⚠",
+  "person": "A person decides which limits apply to which work, and checks that the station is close enough to the site to be fair. The weather record supports a claim; it does not prove the work stopped.",
+  "watch_out": [
+    "A station 20 km away can differ a lot from an exposed site, so say which station you used.",
+    "Daily figures hide timing: a storm at 05:00 may not have cost a working day.",
+    "The diary still matters. Days with bad weather but no note are where claims get argued."
+  ],
+  "explain": "We line up the official DMI weather for every day against the programme, so any time we lose to weather is already evidenced.",
+  "effort": "an afternoon",
+  "image_prompt": "a site office wall with a programme chart and a weather chart side by side, rain on the window",
+  "credit": "Written by hand for this column. Check DMI's archive for the station and figures you need."
+}

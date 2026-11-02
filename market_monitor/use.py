@@ -192,6 +192,21 @@ TOOL_FACTS = (
     "example already built this way: Asset Snap (jonestech.xyz/asset.html) photographs an asset tag, reads the "
     "number, takes 20+ equipment photos and emails them zipped with the asset number as the subject",
 )
+# Where the week's real news comes from. Each must be a plain RSS feed (checked 2026-11-02).
+NEWS_FEEDS = {
+    "9to5Mac": "https://9to5mac.com/feed/",
+    "MacRumors": "https://feeds.macrumors.com/MacRumors-All",
+    "Ars Technica": "https://feeds.arstechnica.com/arstechnica/index",
+    "TechCrunch": "https://techcrunch.com/category/artificial-intelligence/feed/",
+    "Microsoft 365": "https://www.microsoft.com/en-us/microsoft-365/blog/feed/",
+    "Google": "https://blog.google/rss/",
+    "OpenAI": "https://openai.com/news/rss.xml",
+    "Hugging Face": "https://huggingface.co/blog/feed.xml",
+    "Construction Dive": "https://www.constructiondive.com/feeds/topic/technology/",
+}
+# Hand-written editions, used in file-name order on days when the news has nothing worth a column.
+QUEUE_DIR = Path(__file__).parent / "use_featured" / "queue"
+
 LISTS = ("how", "need", "watch_out")
 REQUIRED = ("title", "why", "idea", "before", "after", "person", "explain", "effort") + LISTS
 
@@ -370,6 +385,84 @@ def pick_idea(job: str, past: list[dict], mode: str) -> dict | None:
     return best
 
 
+def gather_news() -> list[dict]:
+    """The past week's items from the news feeds, newest feeds first, without near-duplicate titles."""
+    from madworld import fetch_feed_url
+    items, seen = [], set()
+    for source, url in NEWS_FEEDS.items():
+        for it in fetch_feed_url(url, max_age_hours=7 * 24, limit=25):
+            key = re.sub(r"\W+", " ", it["title"].lower())[:70]
+            if key not in seen:
+                seen.add(key)
+                items.append({"source": source, **it})
+    logger.info("News: %d items from %d feeds", len(items), len(NEWS_FEEDS))
+    return items
+
+
+def article_text(url: str, limit: int = 6000) -> str:
+    """The readable text of an article, so the column is written from what it actually says."""
+    try:
+        r = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/140 Safari/537.36"})
+        r.raise_for_status()
+        s = re.sub(r"(?is)<(script|style|nav|header|footer|aside|form)\b.*?</\1>", " ", r.text)
+        paras = [html.unescape(re.sub(r"<[^>]+>", "", p)).strip() for p in re.findall(r"(?is)<p\b[^>]*>(.*?)</p>", s)]
+        return re.sub(r"\s+", " ", " ".join(p for p in paras if len(p) > 40))[:limit]
+    except Exception as e:
+        logger.warning("Could not read the article (%s): %s", url, e)
+        return ""
+
+
+def pick_news(items: list[dict], past: list[dict]) -> dict | None:
+    """Choose the one news item that gives a working person something new they can use now, or None."""
+    if not items:
+        return None
+    listing = "\n".join(f"{i}. [{it['source']}] {it['title']}" for i, it in enumerate(items[:150]))
+    history = "\n".join(f"- {p['title']}" for p in past[-30:]) or "(none yet)"
+    d = chat_json(
+        "You edit a daily column for busy working people in Europe, many of them in construction and on building "
+        "sites, who are NOT comfortable with technology. Each day's column is about one thing that is NEW this week "
+        "that they can actually use at work. You are strict: most tech news is useless to them. Return ONLY valid JSON.",
+        f"This week's headlines:\n{listing}\n\n"
+        f"Recent columns (do not repeat their idea):\n{history}\n\n"
+        "Find the items that announce something RELEASED and usable now: a new feature in a phone, computer, Office, "
+        "Google or AI app; a new free tool; a new AI that runs on your own computer; a change that creates new work. "
+        "Reject rumours, leaks, deals and discounts, funding, lawsuits, company politics, earnings, new hardware unless "
+        "it changes how people work, anything for programmers only, and anything only available in the USA.\n"
+        "For up to 6 candidates give: n (the headline's number), what_new (one plain sentence), use_at_work (one plain "
+        "sentence: a specific recurring job it helps with, ideally on a building site or in a site office), and scores "
+        "1-10: new (genuinely new this week), useful (saves real time or money at work), real (usable today by an "
+        "ordinary person, without waiting or paying much).\n"
+        'Return JSON: {"candidates":[{"n":0,"what_new":"","use_at_work":"","new":0,"useful":0,"real":0}]}',
+        1800, 0.3, effort="high")
+    cands = []
+    for c in (d or {}).get("candidates", []):
+        try:
+            item = items[int(c["n"])]
+            s = {k: int(c.get(k) or 0) for k in ("new", "useful", "real")}
+        except (KeyError, ValueError, IndexError, TypeError):
+            continue
+        logger.info("  news n%d u%d r%d: %s — %s", s["new"], s["useful"], s["real"], item["title"], c.get("use_at_work", ""))
+        if s["useful"] >= 7 and s["real"] >= 8 and s["new"] >= 6:
+            cands.append({**c, **s, "item": item})
+    if not cands:
+        logger.info("No news item good enough for a column today")
+        return None
+    best = max(cands, key=lambda c: (c["useful"] * 2 + c["real"] + c["new"]))
+    logger.info("Chosen news: %s (%s)", best["item"]["title"], best["item"]["source"])
+    return best
+
+
+def next_queued(past: list[dict]) -> dict | None:
+    """The first hand-written edition that has not been published yet."""
+    done = {p["title"].strip().lower() for p in past}
+    for f in sorted(QUEUE_DIR.glob("*.json")) if QUEUE_DIR.is_dir() else []:
+        d = json.loads(f.read_text(encoding="utf-8"))
+        if d.get("title", "").strip().lower() not in done:
+            logger.info("Using the queued edition %s", f.name)
+            return d
+    return None
+
+
 def normalise(d: dict) -> dict | None:
     """Tidy the writer's JSON: real line breaks, lists as lists. Returns None if anything required is missing."""
     for k in ("before", "after"):
@@ -394,7 +487,7 @@ def normalise(d: dict) -> dict | None:
     return d
 
 
-def write_use(job: str, chosen: dict) -> dict | None:
+def write_use(job: str, chosen: dict, news: dict | None = None) -> dict | None:
     technique = TECHNIQUES.get(chosen.get("technique", ""), chosen.get("technique", ""))
     d = chat_json(
         "You write a daily column for busy working people in Europe: office staff, small business owners, managers, "
@@ -411,8 +504,14 @@ def write_use(job: str, chosen: dict) -> dict | None:
         f"The pain it fixes: {chosen.get('pain', '')}\n"
         f"The little-known trick: {chosen.get('trick', '')}\n"
         f"The technique it uses: {technique}.\n"
-        "Tool facts you can rely on (never claim a tool does more than this):\n" + "\n".join(f"- {x}" for x in TOOL_FACTS) + "\n\n"
-        "Write this idea up as today's column. Keep the pain and the trick specific: name the actual feature or tool, "
+        + (f"\nTHIS COLUMN IS BUILT ON THIS WEEK'S NEWS: {news['item']['title']} ({news['item']['source']}).\n"
+           f"What is new: {news.get('what_new', '')}\n"
+           f"The article says: {news.get('text') or '(could not be read: rely only on the headline)'}\n"
+           "Describe the new feature ONLY as the article describes it. If the article does not say it is available "
+           "in Europe, or on which devices, tell the reader to check. Lead with what is new, then how to use it at work.\n"
+           if news else "")
+        + "Tool facts you can rely on (never claim a tool does more than this):\n" + "\n".join(f"- {x}" for x in TOOL_FACTS) + "\n\n"
+        + "Write this idea up as today's column. Keep the pain and the trick specific: name the actual feature or tool, "
         "and put the trick up front, because it is the reason anyone reads this. The reader should finish thinking "
         "'I had no idea you could do that'. Never fall back on vague claims like saving time, streamlining, "
         "efficiency, instantly or seamlessly: say what changes, with a number.\n\n"
@@ -429,7 +528,8 @@ def write_use(job: str, chosen: dict) -> dict | None:
         '"watch_out": a list of 2 or 3 specific ways this goes wrong in practice\n'
         '"explain": one sentence the reader could say to a colleague or their boss to explain the idea\n'
         '"effort": exactly one of "an afternoon", "a day or two", "a proper project"\n'
-        '"image_prompt": one sentence describing a simple everyday work scene that illustrates the idea',
+        + ('"news_line": one plain sentence saying what is new this week and from whom\n' if news else '')
+        + '"image_prompt": one sentence describing a simple everyday work scene that illustrates the idea',
         4000, 0.7)
     if not d:
         return None
@@ -443,6 +543,10 @@ def build_html(d: dict, number: int, date_str: str, image: str) -> str:
     img = f'<img class="art" src="{e(image)}" alt="">' if image else ""
     try_it = (f'<p><a class="try" href="{e(d["try_url"])}">{e(d.get("try_label", "Try it"))}</a></p>'
               if d.get("try_url") else "")
+    src = d.get("source") or {}
+    news_html = (f'<p class="news"><b>New this week</b> {e(d.get("news_line", ""))} '
+                 f'<a href="{e(src.get("link", ""))}" rel="noopener">{e(src.get("source", "Source"))}: {e(src.get("title", ""))}</a></p>'
+                 if src.get("link") else "")
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -466,6 +570,9 @@ def build_html(d: dict, number: int, date_str: str, image: str) -> str:
   .no {{ font:700 13px 'Space Grotesk', sans-serif; letter-spacing:.14em; color:var(--orange); text-transform:uppercase; margin:26px 0 4px; }}
   h1 {{ font:700 clamp(30px,7vw,44px)/1.08 'Space Grotesk', sans-serif; margin:0 0 14px; letter-spacing:-.02em; }}
   .why {{ font-size:20px; margin:0 0 22px; }}
+  .news {{ background:var(--box); border-left:4px solid var(--orange); padding:10px 14px; margin:0 0 18px; font-size:16px; }}
+  .news b {{ display:block; font:700 12px 'Space Grotesk', sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--orange); }}
+  .news a {{ display:block; color:var(--dim); font-size:14px; margin-top:4px; }}
   .art {{ width:100%; display:block; border:1px solid var(--rule); margin:0 0 6px; }}
   h3 {{ font:700 13px 'Space Grotesk', sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--teal); margin:30px 0 8px; }}
   p {{ margin:0 0 10px; }}
@@ -492,6 +599,7 @@ def build_html(d: dict, number: int, date_str: str, image: str) -> str:
   <p class="meta" style="margin:8px 0 0">One repetitive job, and how to make your phone or computer do it.</p>
   <div class="no">No. {number} · {e(d.get("category", ""))}</div>
   <h1>{e(d["title"])}</h1>
+  {news_html}
   <p class="why">{e(d["why"])}</p>
   {img}
   <section>
@@ -574,7 +682,21 @@ def main(dry_run: bool = False, featured: Path | None = None):
     if featured:
         d = normalise(json.loads(featured.read_text(encoding="utf-8")))
     else:
-        for attempt in range(3):
+        try:
+            news = pick_news(gather_news(), past)
+            if news:
+                news["text"] = article_text(news["item"]["link"])
+                chosen = {"title": news.get("what_new", ""), "pitch": news.get("use_at_work", ""), "technique": "news"}
+                d = write_use("New this week", chosen, news)
+                if d:
+                    d["category"] = "New this week"
+                    d["source"] = news["item"]
+        except Exception as e:
+            logger.error("News edition failed: %s", e)
+        if not d:
+            q = next_queued(past)
+            d = normalise(q) if q else None
+        for attempt in range(3 if not d else 0):
             try:
                 chosen = pick_idea(job, past, mode)
                 d = write_use(job, chosen) if chosen else None
