@@ -28,6 +28,8 @@ from pathlib import Path
 
 import ftplib
 import requests
+
+import archiving
 from openai import OpenAI
 
 # ── load .env ──────────────────────────────────────────────────────────────────
@@ -1185,7 +1187,7 @@ def main(dry_run: bool = False):
 
     # 5. Build HTML
     logger.info("Building HTML...")
-    html = build_html(market, news_sections, big_read, date_str, ap_section=ap_section)
+    html = archiving.add_link(build_html(market, news_sections, big_read, date_str, ap_section=ap_section), "brief")
 
     # 5. Save
     OUTPUT_PATH.write_text(html, encoding="utf-8")
@@ -1199,6 +1201,7 @@ def main(dry_run: bool = False):
     logger.info("Uploading to jonestech.xyz...")
     ftp_upload(OUTPUT_PATH)
     ftp_upload(ai_corr_path, remote_filename="ai_correlation.json")
+    archiving.publish("brief", OUTPUT_PATH)
 
     # 7. Email — send full HTML
     gmail_user = os.getenv("GMAIL_USER", "")

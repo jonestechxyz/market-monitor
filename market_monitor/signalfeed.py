@@ -21,6 +21,8 @@ from pathlib import Path
 
 import base64
 import requests
+
+import archiving
 from openai import OpenAI
 
 _env = Path(__file__).parent / ".env"
@@ -604,13 +606,14 @@ def main(dry_run: bool = False):
 
     image_data = generate_image_b64(forecast.get("image_prompt", ""))
 
-    html = build_html(data, image_data, date_str)
+    html = archiving.add_link(build_html(data, image_data, date_str), "signal")
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     logger.info("Written to %s", OUTPUT_PATH)
 
     if not dry_run:
         archive_name = now.strftime("Signal-%Y-%m-%d.html")
         ftp_upload(OUTPUT_PATH, archive_name=archive_name)
+        archiving.publish("signal", OUTPUT_PATH, copy=False)  # the dated copy is uploaded above
 
 
 if __name__ == "__main__":

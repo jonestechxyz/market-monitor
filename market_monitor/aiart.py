@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+
+import archiving
 from openai import OpenAI
 
 _env = Path(__file__).parent / ".env"
@@ -326,7 +328,7 @@ def main(dry_run: bool = False):
     logger.info("Building Life in 2050 Gallery — %s", date_str)
     theme, prompts = pick_theme_and_prompts(date_str, count=12)
     images = build_images(prompts)
-    html = build_html(images, theme, date_str)
+    html = archiving.add_link(build_html(images, theme, date_str), "aiart")
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     logger.info("Saved %d images to %s", len(images), OUTPUT_PATH)
     if dry_run:
@@ -334,6 +336,7 @@ def main(dry_run: bool = False):
         return
     archive_name = datetime.now().strftime("AiArt-%Y-%m-%d.html")
     ftp_upload(OUTPUT_PATH, archive_name=archive_name)
+    archiving.publish("aiart", OUTPUT_PATH, copy=False)  # the dated copy is uploaded above
     logger.info("Done!")
 
 

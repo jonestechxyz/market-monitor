@@ -26,6 +26,8 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import requests
+
+import archiving
 from openai import OpenAI
 
 # ── load .env ──────────────────────────────────────────────────────────────────
@@ -411,7 +413,7 @@ def main(dry_run: bool = False):
 
     # 3. Build HTML
     logger.info("Building HTML...")
-    html = build_html(data, date_str)
+    html = archiving.add_link(build_html(data, date_str), "aiworld")
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     logger.info("✅ Saved to %s", OUTPUT_PATH)
 
@@ -422,6 +424,7 @@ def main(dry_run: bool = False):
     # 4. FTP upload
     logger.info("Uploading to jonestech.xyz...")
     ftp_upload(OUTPUT_PATH)
+    archiving.publish("aiworld", OUTPUT_PATH)
     logger.info("🎉 AIWorld done!")
 
 if __name__ == "__main__":
