@@ -2,12 +2,13 @@
 """Health check for the Mac mini. launchd runs it every 15 minutes.
 
 It checks the memoir apps, Remote Control, the mini's Tailscale name and certificate, and
-today's daily pages. It sends a Pushover alert to Jason's phone only when something breaks,
-reminds him every 6 hours while it stays broken, and sends "fixed" once it recovers.
+today's daily pages. It alerts Jason only when something breaks (by Pushover once a phone is
+signed in to it, by email until then), reminds him every 6 hours while it stays broken, and sends "fixed" once it recovers.
 Nothing is sent between 23:00 and 07:00; anything still broken goes out after 07:00.
 
-The Pushover keys are read from ~/thechain/market_monitor/.env (PUSHOVER_USER and
-PUSHOVER_TOKEN). They are never written in this file, because the repo is public.
+The Pushover and Gmail keys are read from ~/thechain/market_monitor/.env (PUSHOVER_USER,
+PUSHOVER_TOKEN, GMAIL_USER, GMAIL_APP_PASS, BRIEFING_TO). They are never written in this
+file, because the repo is public.
 Run with --test to send one test alert, or --dry-run to print the checks without sending.
 """
 import datetime as dt
@@ -118,15 +119,59 @@ def env():
     return out
 
 
-def push(title, message):
-    e = env()
-    code, out = run(["curl", "-s", "--max-time", "20",
-                     "--form-string", f"token={e['PUSHOVER_TOKEN']}",
-                     "--form-string", f"user={e['PUSHOVER_USER']}",
-                     "--form-string", f"title={title}",
-                     "--form-string", f"message={message}",
-                     "https://api.pushover.net/1/messages.json"])
+def curl_secret(config, args, stdin_data=None):
+    # Secrets go to curl through stdin (-K -), so they never show up in the process list.
+    try:
+        p = subprocess.run(["curl", "-s", "--max-time", "30", "-K", "-"] + args, input=config,
+                           capture_output=True, text=True, timeout=40)
+        return p.returncode, p.stdout
+    except Exception as e:
+        return 1, str(e)
+
+
+def pushover_has_device(e):
+    if not e.get("PUSHOVER_TOKEN"):
+        return False
+    q = lambda k: e[k].replace('"', '')
+    code, out = curl_secret(f'form-string = "token={q("PUSHOVER_TOKEN")}"\nform-string = "user={q("PUSHOVER_USER")}"\n',
+                            ["https://api.pushover.net/1/users/validate.json"])
+    try:
+        return bool(json.loads(out).get("devices"))
+    except Exception:
+        return False
+
+
+def send_pushover(e, title, message):
+    q = lambda s: s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    config = (f'form-string = "token={q(e["PUSHOVER_TOKEN"])}"\nform-string = "user={q(e["PUSHOVER_USER"])}"\n'
+              f'form-string = "title={q(title)}"\nform-string = "message={q(message)}"\n')
+    code, out = curl_secret(config, ["https://api.pushover.net/1/messages.json"])
     return code == 0 and '"status":1' in out
+
+
+def send_email(e, title, message):
+    # Same Gmail account and address the daily briefing uses.
+    mail = (f"From: Mac mini <{e['GMAIL_USER']}>\r\nTo: {e['BRIEFING_TO']}\r\n"
+            f"Subject: {title}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{message}\r\n")
+    q = lambda s: s.replace('"', '')
+    config = f'user = "{q(e["GMAIL_USER"])}:{q(e["GMAIL_APP_PASS"])}"\n'
+    path = HOME / ".health_mail.txt"
+    path.write_text(mail)
+    try:
+        code, _ = curl_secret(config, ["--ssl-reqd", "smtps://smtp.gmail.com:465",
+                                       "--mail-from", e["GMAIL_USER"], "--mail-rcpt", e["BRIEFING_TO"],
+                                       "--upload-file", str(path)])
+    finally:
+        path.unlink()
+    return code == 0
+
+
+def push(title, message):
+    # Pushover once it has a phone signed in to it; until then, email.
+    e = env()
+    if pushover_has_device(e):
+        return send_pushover(e, title, message)
+    return send_email(e, title, message)
 
 
 def log(msg):
