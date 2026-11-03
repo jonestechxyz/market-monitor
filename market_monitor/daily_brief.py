@@ -82,7 +82,8 @@ def get_unsplash_image(query: str) -> str:
         logger.warning("Unsplash failed for '%s': %s", query, e)
         return ""
 
-groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
+# max_retries: about 16 calls go out back to back, so wait out Groq's per-minute limit instead of dropping a section.
+groq = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY, max_retries=6)
 
 NEWS_FEEDS = [
     {"section": "The Trump Effect",  "icon": "🇺🇸", "query": "Trump+tariffs+OR+Trump+trade+OR+Trump+economy+OR+\"Trump+says\""},
@@ -207,7 +208,7 @@ def groq_article_takes(headlines: list[str], section: str) -> list[str]:
     try:
         numbered = "\n".join(f"{i+1}. {h}" for i, h in enumerate(headlines))
         resp = groq.chat.completions.create(
-            model="groq/compound",
+            model="openai/gpt-oss-120b", extra_body={"reasoning_effort": "low"},
             messages=[
                 {"role": "system", "content": "You are a sharp market analyst. Be direct, contrarian when warranted, and specific. No fluff."},
                 {"role": "user", "content": f"""For each headline in the {section} section, write ONE punchy sentence: a market implication, prediction, or contrarian take. Be specific — mention stocks, sectors or price impacts where relevant.
@@ -218,7 +219,7 @@ Headlines:
 Return a JSON array of strings, one per headline, same order. Return ONLY the JSON array."""}
             ],
             temperature=0.5,
-            max_tokens=400,
+            max_tokens=1200,
         )
         content = resp.choices[0].message.content.strip()
         content = re.sub(r"^```[\w]*\n?", "", content).strip()
@@ -236,12 +237,12 @@ def groq_summarise(headlines: list[str], section: str) -> str:
         return ""
     try:
         resp = groq.chat.completions.create(
-            model="groq/compound",
+            model="openai/gpt-oss-120b", extra_body={"reasoning_effort": "low"},
             messages=[
                 {"role": "system", "content": "You are a sharp financial journalist. Be concise, insightful, no fluff."},
                 {"role": "user", "content": f"Write a 2-sentence editor's summary of these {section} headlines:\n" + "\n".join(f"- {h}" for h in headlines)}
             ],
-            temperature=0.4, max_tokens=120,
+            temperature=0.4, max_tokens=600,
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
@@ -254,12 +255,12 @@ def groq_big_read(all_headlines: list[str]) -> dict:
     try:
         headlines_str = "\n".join(f"- {h}" for h in all_headlines[:20])
         resp = groq.chat.completions.create(
-            model="groq/compound",
+            model="openai/gpt-oss-120b", extra_body={"reasoning_effort": "low"},
             messages=[
                 {"role": "system", "content": "You are a Wired magazine staff writer. Return ONLY valid JSON with no markdown, no code fences, no extra text."},
                 {"role": "user", "content": f"From these headlines pick the most important story and write a Wired-style feature. Return ONLY this JSON structure with no other text:\n{{\"title\": \"short punchy headline\", \"standfirst\": \"one bold sentence\", \"body\": \"three paragraphs separated by double newline\"}}\n\nHeadlines:\n{headlines_str}"}
             ],
-            temperature=0.5, max_tokens=600,
+            temperature=0.5, max_tokens=2000,
         )
         content = resp.choices[0].message.content.strip()
 
@@ -318,7 +319,7 @@ def groq_ai_correlation(asian_movers: list) -> dict:
 
     try:
         resp = groq.chat.completions.create(
-            model="groq/compound",
+            model="openai/gpt-oss-120b", extra_body={"reasoning_effort": "low"},
             messages=[
                 {"role": "system", "content": (
                     "You are a professional equity analyst specialising in AI/semiconductor stocks. "
@@ -348,7 +349,7 @@ Return a JSON object with this exact structure (no markdown, no code fences):
 Cover all {len(AI_TECH_WATCHLIST)} stocks. Return ONLY the JSON object."""}
             ],
             temperature=0.4,
-            max_tokens=1800,
+            max_tokens=4000,
         )
         content = resp.choices[0].message.content.strip()
         content = re.sub(r"^```[\w]*\n?", "", content).strip()
@@ -374,12 +375,12 @@ def groq_market_take(movers: list) -> str:
     try:
         mover_str = ", ".join(f"{m.get('name','?')} ({m.get('pct_change',0):+.1f}%)" for m in movers[:6])
         resp = groq.chat.completions.create(
-            model="groq/compound",
+            model="openai/gpt-oss-120b", extra_body={"reasoning_effort": "low"},
             messages=[
                 {"role": "system", "content": "You are a markets desk analyst. Two sentences max."},
                 {"role": "user", "content": f"Give a sharp overnight take on these Asian movers: {mover_str}"}
             ],
-            temperature=0.3, max_tokens=80,
+            temperature=0.3, max_tokens=500,
         )
         return resp.choices[0].message.content.strip()
     except Exception:
