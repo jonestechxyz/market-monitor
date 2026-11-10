@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -343,7 +344,7 @@ def build_html(data: dict, date_str: str) -> str:
 </section>
 
 <footer class="footer">
-  Compiled {generated} &nbsp;·&nbsp; Curation &amp; copy by Groq (Llama 3.3) &nbsp;·&nbsp; Headlines via Google News &nbsp;·&nbsp; jonestech.xyz
+  Compiled {generated} &nbsp;·&nbsp; Curation &amp; copy by Groq (gpt-oss-120b) &nbsp;·&nbsp; Headlines via Google News &nbsp;·&nbsp; jonestech.xyz
 </footer>
 
 </body>
@@ -403,7 +404,16 @@ def main(dry_run: bool = False):
 
     # 2. Groq writes the dispatch
     logger.info("Asking Groq to write the dispatch...")
-    data = groq_brief(items[:80])
+    data = {}
+    for attempt in range(3):  # the AI now and then returns broken JSON; one bad answer used to publish an empty page
+        data = groq_brief(items[:80])
+        if data.get("marvel") or data.get("panic"):
+            break
+        logger.warning("Empty dispatch on attempt %d — trying again", attempt + 1)
+        time.sleep(30)  # the free tier counts tokens per minute
+    if not (data.get("marvel") or data.get("panic")):
+        logger.error("No dispatch written — leaving yesterday's page up")
+        raise SystemExit(1)
     if data.get("lead"):
         attach_link(data["lead"], items)
     data["marvel"] = [attach_link(e, items) for e in data.get("marvel", [])]
