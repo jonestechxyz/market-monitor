@@ -226,7 +226,7 @@ def past_editions(today: str) -> list[dict]:
         return []
     out = []
     for i, (f, title) in enumerate(rows):
-        d = {"title": title, "idea": "", "technique": ""}
+        d = {"title": title, "idea": "", "technique": "", "source": ""}
         if i >= len(rows) - 10:
             try:
                 s = requests.get(ARCHIVE + f, timeout=20).content.decode("utf-8")
@@ -234,6 +234,8 @@ def past_editions(today: str) -> list[dict]:
                 d["technique"] = m.group(1) if m else ""
                 m = re.search(r"The idea</h3>\s*<p>(.*?)</p>", s, re.S)
                 d["idea"] = html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip() if m else ""
+                m = re.search(r'<p class="news">.*?<a href="([^"]*)"', s, re.S)
+                d["source"] = html.unescape(m.group(1)) if m else ""
             except Exception:
                 pass
         out.append(d)
@@ -414,22 +416,27 @@ def article_text(url: str, limit: int = 6000) -> str:
 
 def pick_news(items: list[dict], past: list[dict]) -> dict | None:
     """Choose the one news item that gives a working person something new they can use now, or None."""
+    used = {p["source"] for p in past if p.get("source")}
+    items = [it for it in items if it.get("link") not in used]  # the same article used to win two days running
     if not items:
         return None
     listing = "\n".join(f"{i}. [{it['source']}] {it['title']}" for i, it in enumerate(items[:150]))
     history = "\n".join(f"- {p['title']}" for p in past[-30:]) or "(none yet)"
     d = chat_json(
-        "You edit a daily column for busy working people in Europe, many of them in construction and on building "
-        "sites, who are NOT comfortable with technology. Each day's column is about one thing that is NEW this week "
+        "You edit a daily column for busy working people in Europe (offices, small businesses, trades, people on the "
+        "road) who are NOT comfortable with technology. Each day's column is about one thing that is NEW this week "
         "that they can actually use at work. You are strict: most tech news is useless to them. Return ONLY valid JSON.",
         f"This week's headlines:\n{listing}\n\n"
         f"Recent columns (do not repeat their idea):\n{history}\n\n"
         "Find the items that announce something RELEASED and usable now: a new feature in a phone, computer, Office, "
         "Google or AI app; a new free tool; a new AI that runs on your own computer; a change that creates new work. "
         "Reject rumours, leaks, deals and discounts, funding, lawsuits, company politics, earnings, new hardware unless "
-        "it changes how people work, anything for programmers only, and anything only available in the USA.\n"
+        "it changes how people work, anything for programmers only, and anything only available in the USA. Also "
+        "reject: system, security and bug-fix updates (iOS 27.2.1 and the like), a new AI version with no specific new "
+        "thing to do with it, shopping and ordering assistants, reviews and opinion pieces, and anything whose only "
+        "use is 'remind people to update'.\n"
         "For up to 6 candidates give: n (the headline's number), what_new (one plain sentence), use_at_work (one plain "
-        "sentence: a specific recurring job it helps with, ideally on a building site or in a site office), and scores "
+        "sentence: a specific recurring job at work it takes off someone's hands), and scores "
         "1-10: new (genuinely new this week), useful (saves real time or money at work), real (usable today by an "
         "ordinary person, without waiting or paying much).\n"
         'Return JSON: {"candidates":[{"n":0,"what_new":"","use_at_work":"","new":0,"useful":0,"real":0}]}',
@@ -445,12 +452,45 @@ def pick_news(items: list[dict], past: list[dict]) -> dict | None:
         logger.info("  news n%d u%d r%d: %s — %s", s["new"], s["useful"], s["real"], item["title"], c.get("use_at_work", ""))
         if s["useful"] >= 7 and s["real"] >= 8 and s["new"] >= 6:
             cands.append({**c, **s, "item": item})
+    cands = judge_news(cands)  # the picker rated an iOS bug-fix release 8/10 useful, so a sceptic re-scores them
     if not cands:
         logger.info("No news item good enough for a column today")
         return None
-    best = max(cands, key=lambda c: (c["useful"] * 2 + c["real"] + c["new"]))
+    best = max(cands, key=lambda c: (c["j_useful"] * 2 + c["j_surprise"] + c["new"]))
     logger.info("Chosen news: %s (%s)", best["item"]["title"], best["item"]["source"])
     return best
+
+
+def judge_news(cands: list[dict]) -> list[dict]:
+    """A separate, sceptical reader re-scores the news candidates; only the ones that would really change someone's
+    working week survive."""
+    if not cands:
+        return []
+    listing = "\n".join(f"[{i}] {c['item']['title']} ({c['item']['source']})\n    New: {c.get('what_new', '')}\n"
+                         f"    Use at work: {c.get('use_at_work', '')}" for i, c in enumerate(cands))
+    d = chat_json(
+        "You are a hard-bitten office manager with thirty years of running teams and no patience for gadgets or tech "
+        "hype. You score honestly and harshly. Return ONLY valid JSON.",
+        f"Each item is this week's tech news plus a suggested use at work.\n\n{listing}\n\n"
+        "Score each 1-10 for:\n"
+        "- useful: would this really take a recurring job off an ordinary working person's hands, every week? An "
+        "update, a security fix, a reminder to update, or a use that is a stretch scores 2.\n"
+        "- surprise: would they say 'I didn't know I could do that now'?\n"
+        "- sense: is the suggested use how people really work, not forced? 1 = forced or silly.\n"
+        'Return JSON: {"scores":[{"id":n,"useful":n,"surprise":n,"sense":n,"comment":"a few words"}]}',
+        3000, 0.2, "medium")
+    out = []
+    for sc in (d or {}).get("scores", []):
+        try:
+            c = cands[int(sc["id"])]
+            j = {f"j_{k}": int(sc.get(k) or 0) for k in ("useful", "surprise", "sense")}
+        except (KeyError, ValueError, IndexError, TypeError):
+            continue
+        logger.info("  judged u%d s%d n%d: %s (%s)", j["j_useful"], j["j_surprise"], j["j_sense"], c["item"]["title"],
+                    sc.get("comment", ""))
+        if j["j_useful"] >= 8 and j["j_surprise"] >= 6 and j["j_sense"] >= 8:
+            out.append({**c, **j})
+    return out
 
 
 def next_queued(past: list[dict]) -> dict | None:
@@ -687,7 +727,8 @@ def main(dry_run: bool = False, featured: Path | None = None):
         d = normalise(json.loads(featured.read_text(encoding="utf-8")))
     else:
         try:
-            news = pick_news(gather_news(), past)
+            # The news leads at most every other day, so the idea brainstorm still gets its turn.
+            news = pick_news(gather_news(), past) if not (past and past[-1]["technique"] == "news") else None
             if news:
                 news["text"] = article_text(news["item"]["link"])
                 chosen = {"title": news.get("what_new", ""), "pitch": news.get("use_at_work", ""), "technique": "news"}
